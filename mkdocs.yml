@@ -1,10 +1,10 @@
 site_name: S3 Asyncio Client
 site_description: A minimal, fast, and simple asyncio-based Amazon S3 client library for Python
 site_author: S3 Asyncio Client Contributors
-site_url: https://your-username.github.io/s3-asyncio-client
+site_url: https://kissgyorgy.github.io/s3-asyncio-client
 
-repo_name: your-username/s3-asyncio-client
-repo_url: https://github.com/your-username/s3-asyncio-client
+repo_name: kissgyorgy/s3-asyncio-client
+repo_url: https://github.com/kissgyorgy/s3-asyncio-client
 
 theme:
   name: material
@@ -64,7 +64,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/your-username/s3-asyncio-client
+      link: https://github.com/kissgyorgy/s3-asyncio-client
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/s3-asyncio-client/
 
@@ -95,7 +95,7 @@ markdown_extensions:
   - pymdownx.magiclink:
       normalize_issue_symbols: true
       repo_url_shorthand: true
-      user: your-username
+      user: kissgyorgy
       repo: s3-asyncio-client
   - pymdownx.mark
   - pymdownx.smartsymbols

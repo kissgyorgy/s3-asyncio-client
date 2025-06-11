@@ -1,7 +1,7 @@
 # S3 Asyncio Client
 
-[![Tests](https://github.com/your-username/s3-asyncio-client/actions/workflows/test.yml/badge.svg)](https://github.com/your-username/s3-asyncio-client/actions/workflows/test.yml)
-[![Documentation](https://github.com/your-username/s3-asyncio-client/actions/workflows/docs.yml/badge.svg)](https://your-username.github.io/s3-asyncio-client/)
+[![Tests](https://github.com/kissgyorgy/s3-asyncio-client/actions/workflows/test.yml/badge.svg)](https://github.com/kissgyorgy/s3-asyncio-client/actions/workflows/test.yml)
+[![Documentation](https://github.com/kissgyorgy/s3-asyncio-client/actions/workflows/docs.yml/badge.svg)](https://kissgyorgy.github.io/s3-asyncio-client/)
 [![PyPI version](https://badge.fury.io/py/s3-asyncio-client.svg)](https://badge.fury.io/py/s3-asyncio-client)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
@@ -66,13 +66,13 @@ asyncio.run(main())
 
 ## Documentation
 
-📖 **[Full Documentation](https://your-username.github.io/s3-asyncio-client/)**
+📖 **[Full Documentation](https://kissgyorgy.github.io/s3-asyncio-client/)**
 
-- [Installation Guide](https://your-username.github.io/s3-asyncio-client/getting-started/installation/)
-- [Quick Start Tutorial](https://your-username.github.io/s3-asyncio-client/getting-started/quickstart/)
-- [API Reference](https://your-username.github.io/s3-asyncio-client/reference/)
-- [Examples](https://your-username.github.io/s3-asyncio-client/examples/)
-- [Performance Guide](https://your-username.github.io/s3-asyncio-client/guide/performance/)
+- [Installation Guide](https://kissgyorgy.github.io/s3-asyncio-client/getting-started/installation/)
+- [Quick Start Tutorial](https://kissgyorgy.github.io/s3-asyncio-client/getting-started/quickstart/)
+- [API Reference](https://kissgyorgy.github.io/s3-asyncio-client/reference/)
+- [Examples](https://kissgyorgy.github.io/s3-asyncio-client/examples/)
+- [Performance Guide](https://kissgyorgy.github.io/s3-asyncio-client/guide/performance/)
 
 ## Advanced Example
 
@@ -147,7 +147,7 @@ client = S3Client(
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/s3-asyncio-client.git
+git clone https://github.com/kissgyorgy/s3-asyncio-client.git
 cd s3-asyncio-client
 
 # Setup with uv (recommended)
@@ -165,7 +165,7 @@ uv run ruff check
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](https://your-username.github.io/s3-asyncio-client/development/contributing/) for details.
+We welcome contributions! Please see our [Contributing Guide](https://kissgyorgy.github.io/s3-asyncio-client/development/contributing/) for details.
 
 ## License
 
