@@ -211,8 +211,37 @@ class S3Client:
         Returns:
             Dictionary with object data and metadata
         """
-        # Implementation will be added in next task
-        raise NotImplementedError("get_object will be implemented next")
+        response = await self._make_request(
+            method="GET",
+            bucket=bucket,
+            key=key,
+        )
+
+        # Read the response body
+        body = await response.read()
+
+        # Extract metadata from headers
+        metadata = {}
+        for header_name, header_value in response.headers.items():
+            if header_name.lower().startswith("x-amz-meta-"):
+                # Remove the x-amz-meta- prefix
+                meta_key = header_name[11:]  # len("x-amz-meta-") = 11
+                metadata[meta_key] = header_value
+
+        result = {
+            "body": body,
+            "content_type": response.headers.get("Content-Type"),
+            "content_length": int(response.headers.get("Content-Length", 0)),
+            "etag": response.headers.get("ETag", "").strip('"'),
+            "last_modified": response.headers.get("Last-Modified"),
+            "version_id": response.headers.get("x-amz-version-id"),
+            "server_side_encryption": response.headers.get(
+                "x-amz-server-side-encryption"
+            ),
+            "metadata": metadata,
+        }
+
+        return result
 
     async def head_object(
         self,
@@ -228,8 +257,33 @@ class S3Client:
         Returns:
             Dictionary with object metadata
         """
-        # Implementation will be added in next task
-        raise NotImplementedError("head_object will be implemented next")
+        response = await self._make_request(
+            method="HEAD",
+            bucket=bucket,
+            key=key,
+        )
+
+        # Extract metadata from headers (same as get_object, but no body)
+        metadata = {}
+        for header_name, header_value in response.headers.items():
+            if header_name.lower().startswith("x-amz-meta-"):
+                # Remove the x-amz-meta- prefix
+                meta_key = header_name[11:]  # len("x-amz-meta-") = 11
+                metadata[meta_key] = header_value
+
+        result = {
+            "content_type": response.headers.get("Content-Type"),
+            "content_length": int(response.headers.get("Content-Length", 0)),
+            "etag": response.headers.get("ETag", "").strip('"'),
+            "last_modified": response.headers.get("Last-Modified"),
+            "version_id": response.headers.get("x-amz-version-id"),
+            "server_side_encryption": response.headers.get(
+                "x-amz-server-side-encryption"
+            ),
+            "metadata": metadata,
+        }
+
+        return result
 
     async def list_objects(
         self,
@@ -249,8 +303,68 @@ class S3Client:
         Returns:
             Dictionary with list of objects and pagination info
         """
-        # Implementation will be added in next task
-        raise NotImplementedError("list_objects will be implemented next")
+        # Build query parameters
+        params = {
+            "list-type": "2",  # Use ListObjectsV2
+            "max-keys": str(max_keys),
+        }
+
+        if prefix:
+            params["prefix"] = prefix
+
+        if continuation_token:
+            params["continuation-token"] = continuation_token
+
+        response = await self._make_request(
+            method="GET",
+            bucket=bucket,
+            params=params,
+        )
+
+        # Parse XML response
+        response_text = await response.text()
+        root = ET.fromstring(response_text)
+
+        # Extract objects
+        objects = []
+        for content in root.findall(".//{http://s3.amazonaws.com/doc/2006-03-01/}Contents"):
+            key = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}Key")
+            last_modified = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}LastModified")
+            etag = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}ETag")
+            size = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}Size")
+            storage_class = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}StorageClass")
+
+            obj = {
+                "key": key.text if key is not None else "",
+                "last_modified": (
+                    last_modified.text if last_modified is not None else ""
+                ),
+                "etag": etag.text.strip('"') if etag is not None else "",
+                "size": int(size.text) if size is not None else 0,
+                "storage_class": (
+                    storage_class.text if storage_class is not None else "STANDARD"
+                ),
+            }
+            objects.append(obj)
+
+        # Extract pagination info
+        is_truncated_elem = root.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}IsTruncated")
+        next_token_elem = root.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}NextContinuationToken")
+
+        is_truncated = (is_truncated_elem is not None and
+                       is_truncated_elem.text == "true")
+        next_continuation_token = (next_token_elem.text
+                                 if next_token_elem is not None else None)
+
+        result = {
+            "objects": objects,
+            "is_truncated": is_truncated,
+            "next_continuation_token": next_continuation_token,
+            "prefix": prefix,
+            "max_keys": max_keys,
+        }
+
+        return result
 
     def generate_presigned_url(
         self,
@@ -272,5 +386,11 @@ class S3Client:
         Returns:
             Presigned URL string
         """
-        # Implementation will be added in next task
-        raise NotImplementedError("generate_presigned_url will be implemented next")
+        url = self._build_url(bucket, key)
+
+        return self._auth.create_presigned_url(
+            method=method,
+            url=url,
+            expires_in=expires_in,
+            query_params=params,
+        )
