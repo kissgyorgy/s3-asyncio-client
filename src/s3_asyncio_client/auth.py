@@ -31,9 +31,7 @@ class AWSSignatureV4:
 
     def _get_signature_key(self, date_stamp: str) -> bytes:
         """Derive the signing key for AWS Signature Version 4."""
-        k_date = self._hmac_sha256(
-            f"AWS4{self.secret_key}".encode(), date_stamp
-        )
+        k_date = self._hmac_sha256(f"AWS4{self.secret_key}".encode(), date_stamp)
         k_region = self._hmac_sha256(k_date, self.region)
         k_service = self._hmac_sha256(k_region, self.service)
         k_signing = self._hmac_sha256(k_service, "aws4_request")
@@ -58,14 +56,16 @@ class AWSSignatureV4:
             header_value = headers[header_name].strip()
             canonical_headers += f"{header_name.lower()}:{header_value}\n"
 
-        canonical_request = "\n".join([
-            method,
-            canonical_uri,
-            canonical_querystring,
-            canonical_headers,
-            signed_headers,
-            payload_hash,
-        ])
+        canonical_request = "\n".join(
+            [
+                method,
+                canonical_uri,
+                canonical_querystring,
+                canonical_headers,
+                signed_headers,
+                payload_hash,
+            ]
+        )
 
         return canonical_request
 
@@ -78,12 +78,14 @@ class AWSSignatureV4:
         """Create string to sign for AWS Signature Version 4."""
         algorithm = "AWS4-HMAC-SHA256"
         credential_scope = f"{date_stamp}/{self.region}/{self.service}/aws4_request"
-        string_to_sign = "\n".join([
-            algorithm,
-            timestamp,
-            credential_scope,
-            self._sha256_hash(canonical_request.encode("utf-8")),
-        ])
+        string_to_sign = "\n".join(
+            [
+                algorithm,
+                timestamp,
+                credential_scope,
+                self._sha256_hash(canonical_request.encode("utf-8")),
+            ]
+        )
         return string_to_sign
 
     def sign_request(
@@ -124,10 +126,12 @@ class AWSSignatureV4:
         signed_headers = ";".join(sorted(headers.keys(), key=str.lower))
 
         # Create query string
-        query_string = "&".join([
-            f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
-            for k, v in sorted(query_params.items())
-        ])
+        query_string = "&".join(
+            [
+                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                for k, v in sorted(query_params.items())
+            ]
+        )
 
         # Create canonical request
         canonical_request = self._create_canonical_request(
@@ -187,19 +191,23 @@ class AWSSignatureV4:
 
         # Add AWS query parameters
         credential_scope = f"{date_stamp}/{self.region}/{self.service}/aws4_request"
-        query_params.update({
-            "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
-            "X-Amz-Credential": f"{self.access_key}/{credential_scope}",
-            "X-Amz-Date": timestamp,
-            "X-Amz-Expires": str(expires_in),
-            "X-Amz-SignedHeaders": "host",
-        })
+        query_params.update(
+            {
+                "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+                "X-Amz-Credential": f"{self.access_key}/{credential_scope}",
+                "X-Amz-Date": timestamp,
+                "X-Amz-Expires": str(expires_in),
+                "X-Amz-SignedHeaders": "host",
+            }
+        )
 
         # Create query string for signing
-        query_string = "&".join([
-            f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
-            for k, v in sorted(query_params.items())
-        ])
+        query_string = "&".join(
+            [
+                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                for k, v in sorted(query_params.items())
+            ]
+        )
 
         # Create canonical request for presigned URL
         headers = {"host": parsed_url.netloc}
@@ -231,9 +239,11 @@ class AWSSignatureV4:
         query_params["X-Amz-Signature"] = signature
 
         # Build final URL
-        final_query_string = "&".join([
-            f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
-            for k, v in sorted(query_params.items())
-        ])
+        final_query_string = "&".join(
+            [
+                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                for k, v in sorted(query_params.items())
+            ]
+        )
 
         return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{final_query_string}"

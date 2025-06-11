@@ -186,9 +186,7 @@ def test_create_presigned_url_with_query_params(mock_datetime, auth):
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     query_params = {"response-content-type": "text/plain"}
 
-    presigned_url = auth.create_presigned_url(
-        method, url, query_params=query_params
-    )
+    presigned_url = auth.create_presigned_url(method, url, query_params=query_params)
 
     # Check that custom query parameters are included
     parsed = urllib.parse.urlparse(presigned_url)

@@ -2,6 +2,7 @@
 
 __version__ = "0.1.0"
 
+from .client import S3Client
 from .exceptions import (
     S3AccessDeniedError,
     S3ClientError,
@@ -12,6 +13,7 @@ from .exceptions import (
 )
 
 __all__ = [
+    "S3Client",
     "S3Error",
     "S3ClientError",
     "S3ServerError",
