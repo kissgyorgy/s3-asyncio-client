@@ -164,8 +164,38 @@ class S3Client:
         Returns:
             Dictionary with upload response information
         """
-        # Implementation will be added in next task
-        raise NotImplementedError("put_object will be implemented next")
+        headers = {}
+
+        # Set content type
+        if content_type:
+            headers["Content-Type"] = content_type
+
+        # Add metadata headers
+        if metadata:
+            for key_name, value in metadata.items():
+                headers[f"x-amz-meta-{key_name}"] = value
+
+        # Set content length
+        headers["Content-Length"] = str(len(data))
+
+        response = await self._make_request(
+            method="PUT",
+            bucket=bucket,
+            key=key,
+            headers=headers,
+            data=data,
+        )
+
+        # Extract response information
+        result = {
+            "etag": response.headers.get("ETag", "").strip('"'),
+            "version_id": response.headers.get("x-amz-version-id"),
+            "server_side_encryption": response.headers.get(
+                "x-amz-server-side-encryption"
+            ),
+        }
+
+        return result
 
     async def get_object(
         self,
