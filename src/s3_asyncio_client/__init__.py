@@ -11,9 +11,11 @@ from .exceptions import (
     S3NotFoundError,
     S3ServerError,
 )
+from .multipart import MultipartUpload
 
 __all__ = [
     "S3Client",
+    "MultipartUpload",
     "S3Error",
     "S3ClientError",
     "S3ServerError",

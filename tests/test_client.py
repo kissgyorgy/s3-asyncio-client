@@ -185,15 +185,15 @@ async def test_methods_are_implemented(client):
     """Test that methods are implemented and don't raise NotImplementedError."""
     # Mock the _make_request method to avoid actual network calls
     from unittest.mock import AsyncMock, Mock
-    
+
     mock_response = Mock()
     mock_response.headers = {"ETag": '"test"'}
     mock_response.read = AsyncMock(return_value=b"test")
     mock_response.text = AsyncMock(return_value="<xml>test</xml>")
-    
+
     client._make_request = AsyncMock(return_value=mock_response)
     client._auth.create_presigned_url = Mock(return_value="https://example.com")
-    
+
     # These should not raise NotImplementedError anymore
     await client.put_object("bucket", "key", b"data")
     await client.get_object("bucket", "key")
