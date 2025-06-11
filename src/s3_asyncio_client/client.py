@@ -14,6 +14,7 @@ from .exceptions import (
     S3NotFoundError,
     S3ServerError,
 )
+from .multipart import MultipartUpload
 
 
 class S3Client:
@@ -394,3 +395,125 @@ class S3Client:
             expires_in=expires_in,
             query_params=params,
         )
+
+    async def create_multipart_upload(
+        self,
+        bucket: str,
+        key: str,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> MultipartUpload:
+        """Initiate a multipart upload.
+
+        Args:
+            bucket: S3 bucket name
+            key: Object key (path)
+            content_type: MIME type of the object
+            metadata: Custom metadata headers (without x-amz-meta- prefix)
+
+        Returns:
+            MultipartUpload instance for managing the upload
+        """
+        headers = {}
+
+        # Set content type
+        if content_type:
+            headers["Content-Type"] = content_type
+
+        # Add metadata headers
+        if metadata:
+            for key_name, value in metadata.items():
+                headers[f"x-amz-meta-{key_name}"] = value
+
+        params = {"uploads": ""}
+
+        response = await self._make_request(
+            method="POST",
+            bucket=bucket,
+            key=key,
+            headers=headers,
+            params=params,
+        )
+
+        # Parse response to get upload ID
+        response_text = await response.text()
+        root = ET.fromstring(response_text)
+
+        upload_id_elem = root.find("UploadId")
+        if upload_id_elem is None:
+            raise S3ClientError("No UploadId in response")
+
+        upload_id = upload_id_elem.text
+
+        return MultipartUpload(self, bucket, key, upload_id)
+
+    async def upload_file_multipart(
+        self,
+        bucket: str,
+        key: str,
+        data: bytes,
+        part_size: int = 5 * 1024 * 1024,  # 5MB default
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Upload a large file using multipart upload.
+
+        Args:
+            bucket: S3 bucket name
+            key: Object key (path)
+            data: File data as bytes
+            part_size: Size of each part in bytes (minimum 5MB except last part)
+            content_type: MIME type of the object
+            metadata: Custom metadata headers
+
+        Returns:
+            Dictionary with upload completion information
+        """
+        if part_size < 5 * 1024 * 1024:
+            raise S3ClientError("Part size must be at least 5MB")
+
+        if len(data) <= part_size:
+            # For small files, use regular put_object
+            return await self.put_object(
+                bucket=bucket,
+                key=key,
+                data=data,
+                content_type=content_type,
+                metadata=metadata,
+            )
+
+        # Create multipart upload
+        multipart = await self.create_multipart_upload(
+            bucket=bucket,
+            key=key,
+            content_type=content_type,
+            metadata=metadata,
+        )
+
+        try:
+            # Upload parts
+            part_number = 1
+            offset = 0
+
+            while offset < len(data):
+                # Calculate part data
+                end_offset = min(offset + part_size, len(data))
+                part_data = data[offset:end_offset]
+
+                # Upload part
+                await multipart.upload_part(part_number, part_data)
+
+                offset = end_offset
+                part_number += 1
+
+            # Complete upload
+            result = await multipart.complete()
+            return result
+
+        except Exception:
+            # Abort upload on any error
+            try:
+                await multipart.abort()
+            except Exception:
+                pass  # Ignore abort errors
+            raise
