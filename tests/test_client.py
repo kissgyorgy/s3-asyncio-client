@@ -218,5 +218,3 @@ async def test_close_session(client):
     assert client._session is not None
     await client.close()
     assert client._session is None
-
-

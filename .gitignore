@@ -73,5 +73,11 @@ Thumbs.db
 # MkDocs
 site/
 
-# uv
 .python-version
+
+.devenv*
+devenv.local.nix
+
+.direnv
+
+.pre-commit-config.yaml
