@@ -1,8 +1,8 @@
 """Tests for AWS Signature Version 4 authentication."""
 
+import datetime as dt
 import hashlib
 import urllib.parse
-from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -82,12 +82,12 @@ def test_create_string_to_sign(auth):
     assert "20230101/us-east-1/s3/aws4_request" in string_to_sign
 
 
-@patch("s3_asyncio_client.auth.datetime")
-def test_sign_request(mock_datetime, auth):
+@patch("s3_asyncio_client.auth.dt")
+def test_sign_request(mock_dt, auth):
     """Test request signing."""
     # Mock datetime
-    mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.now.return_value = mock_now
+    mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
+    mock_dt.datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -109,12 +109,12 @@ def test_sign_request(mock_datetime, auth):
     assert "Signature=" in auth_header
 
 
-@patch("s3_asyncio_client.auth.datetime")
-def test_sign_request_with_payload(mock_datetime, auth):
+@patch("s3_asyncio_client.auth.dt")
+def test_sign_request_with_payload(mock_dt, auth):
     """Test request signing with payload."""
     # Mock datetime
-    mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.now.return_value = mock_now
+    mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
+    mock_dt.datetime.now.return_value = mock_now
 
     method = "PUT"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -127,12 +127,12 @@ def test_sign_request_with_payload(mock_datetime, auth):
     assert signed_headers["x-amz-content-sha256"] == expected_hash
 
 
-@patch("s3_asyncio_client.auth.datetime")
-def test_sign_request_with_query_params(mock_datetime, auth):
+@patch("s3_asyncio_client.auth.dt")
+def test_sign_request_with_query_params(mock_dt, auth):
     """Test request signing with query parameters."""
     # Mock datetime
-    mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.now.return_value = mock_now
+    mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
+    mock_dt.datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -144,12 +144,12 @@ def test_sign_request_with_query_params(mock_datetime, auth):
     # The canonical request should include the query parameters in signing
 
 
-@patch("s3_asyncio_client.auth.datetime")
-def test_create_presigned_url(mock_datetime, auth):
+@patch("s3_asyncio_client.auth.dt")
+def test_create_presigned_url(mock_dt, auth):
     """Test presigned URL creation."""
     # Mock datetime
-    mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.now.return_value = mock_now
+    mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
+    mock_dt.datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -175,12 +175,12 @@ def test_create_presigned_url(mock_datetime, auth):
     assert "AKIAIOSFODNN7EXAMPLE" in query_params["X-Amz-Credential"][0]
 
 
-@patch("s3_asyncio_client.auth.datetime")
-def test_create_presigned_url_with_query_params(mock_datetime, auth):
+@patch("s3_asyncio_client.auth.dt")
+def test_create_presigned_url_with_query_params(mock_dt, auth):
     """Test presigned URL creation with additional query parameters."""
     # Mock datetime
-    mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.now.return_value = mock_now
+    mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
+    mock_dt.datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"

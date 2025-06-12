@@ -1,9 +1,9 @@
 """AWS Signature Version 4 authentication for S3."""
 
+import datetime as dt
 import hashlib
 import hmac
 import urllib.parse
-from datetime import datetime, timezone
 
 
 class AWSSignatureV4:
@@ -109,7 +109,7 @@ class AWSSignatureV4:
         uri = parsed_url.path or "/"
 
         # Create timestamp
-        now = datetime.now(timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
@@ -129,7 +129,8 @@ class AWSSignatureV4:
         # AWS requires ALL characters to be encoded except unreserved ones
         query_string = "&".join(
             [
-                f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(str(v), safe='')}"
+                f"{urllib.parse.quote(k, safe='')}="
+                f"{urllib.parse.quote(str(v), safe='')}"
                 for k, v in sorted(query_params.items())
             ]
         )
@@ -186,7 +187,7 @@ class AWSSignatureV4:
         parsed_url = urllib.parse.urlparse(url)
 
         # Create timestamp
-        now = datetime.now(timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
