@@ -123,7 +123,7 @@ class AWSSignatureV4:
             headers["x-amz-content-sha256"] = self._sha256_hash(payload)
 
         # Create signed headers list
-        signed_headers = ";".join(sorted(headers.keys(), key=str.lower))
+        signed_headers = ";".join(sorted([k.lower() for k in headers.keys()]))
 
         # Create query string
         query_string = "&".join(

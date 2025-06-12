@@ -46,6 +46,7 @@ class MultipartUpload:
         )
 
         etag = response.headers.get("ETag", "").strip('"')
+        response.close()
 
         part_info = {
             "part_number": part_number,
@@ -75,14 +76,14 @@ class MultipartUpload:
             parts_xml.append(
                 f"<Part>"
                 f"<PartNumber>{part['part_number']}</PartNumber>"
-                f"<ETag>\"{part['etag']}\"</ETag>"
+                f'<ETag>"{part["etag"]}"</ETag>'
                 f"</Part>"
             )
 
         xml_data = (
             "<CompleteMultipartUpload>"
-            + "".join(parts_xml) +
-            "</CompleteMultipartUpload>"
+            + "".join(parts_xml)
+            + "</CompleteMultipartUpload>"
         )
 
         params = {"uploadId": self.upload_id}
@@ -102,6 +103,7 @@ class MultipartUpload:
 
         # Parse response
         response_text = await response.text()
+        response.close()
         root = ET.fromstring(response_text)
 
         # Extract completion information

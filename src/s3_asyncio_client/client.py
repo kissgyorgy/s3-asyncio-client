@@ -132,18 +132,20 @@ class S3Client:
         )
 
         # Make the request
-        async with self._session.request(
+        response = await self._session.request(
             method=method,
             url=url,
             headers=signed_headers,
             params=params,
             data=data,
-        ) as response:
-            if response.status >= 400:
-                error_text = await response.text()
-                raise self._parse_error_response(response.status, error_text)
+        )
 
-            return response
+        if response.status >= 400:
+            error_text = await response.text()
+            response.close()
+            raise self._parse_error_response(response.status, error_text)
+
+        return response
 
     async def put_object(
         self,
@@ -196,6 +198,7 @@ class S3Client:
             ),
         }
 
+        response.close()
         return result
 
     async def get_object(
@@ -220,6 +223,7 @@ class S3Client:
 
         # Read the response body
         body = await response.read()
+        response.close()
 
         # Extract metadata from headers
         metadata = {}
@@ -284,6 +288,35 @@ class S3Client:
             "metadata": metadata,
         }
 
+        response.close()
+        return result
+
+    async def delete_object(
+        self,
+        bucket: str,
+        key: str,
+    ) -> dict[str, Any]:
+        """Delete an object from S3.
+
+        Args:
+            bucket: S3 bucket name
+            key: Object key (path)
+
+        Returns:
+            Dictionary with deletion information
+        """
+        response = await self._make_request(
+            method="DELETE",
+            bucket=bucket,
+            key=key,
+        )
+
+        result = {
+            "delete_marker": response.headers.get("x-amz-delete-marker") == "true",
+            "version_id": response.headers.get("x-amz-version-id"),
+        }
+
+        response.close()
         return result
 
     async def list_objects(
@@ -324,16 +357,23 @@ class S3Client:
 
         # Parse XML response
         response_text = await response.text()
+        response.close()
         root = ET.fromstring(response_text)
 
         # Extract objects
         objects = []
-        for content in root.findall(".//{http://s3.amazonaws.com/doc/2006-03-01/}Contents"):
+        for content in root.findall(
+            ".//{http://s3.amazonaws.com/doc/2006-03-01/}Contents"
+        ):
             key = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}Key")
-            last_modified = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}LastModified")
+            last_modified = content.find(
+                ".//{http://s3.amazonaws.com/doc/2006-03-01/}LastModified"
+            )
             etag = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}ETag")
             size = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}Size")
-            storage_class = content.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}StorageClass")
+            storage_class = content.find(
+                ".//{http://s3.amazonaws.com/doc/2006-03-01/}StorageClass"
+            )
 
             obj = {
                 "key": key.text if key is not None else "",
@@ -349,13 +389,19 @@ class S3Client:
             objects.append(obj)
 
         # Extract pagination info
-        is_truncated_elem = root.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}IsTruncated")
-        next_token_elem = root.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}NextContinuationToken")
+        is_truncated_elem = root.find(
+            ".//{http://s3.amazonaws.com/doc/2006-03-01/}IsTruncated"
+        )
+        next_token_elem = root.find(
+            ".//{http://s3.amazonaws.com/doc/2006-03-01/}NextContinuationToken"
+        )
 
-        is_truncated = (is_truncated_elem is not None and
-                       is_truncated_elem.text == "true")
-        next_continuation_token = (next_token_elem.text
-                                 if next_token_elem is not None else None)
+        is_truncated = (
+            is_truncated_elem is not None and is_truncated_elem.text == "true"
+        )
+        next_continuation_token = (
+            next_token_elem.text if next_token_elem is not None else None
+        )
 
         result = {
             "objects": objects,
@@ -437,6 +483,7 @@ class S3Client:
 
         # Parse response to get upload ID
         response_text = await response.text()
+        response.close()
         root = ET.fromstring(response_text)
 
         upload_id_elem = root.find("UploadId")

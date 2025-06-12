@@ -116,10 +116,7 @@ async def test_list_objects_with_pagination():
 
     client._make_request = AsyncMock(return_value=mock_response)
 
-    result = await client.list_objects(
-        "test-bucket",
-        continuation_token="prev-token"
-    )
+    result = await client.list_objects("test-bucket", continuation_token="prev-token")
 
     # Check pagination parameters
     client._make_request.assert_called_once_with(

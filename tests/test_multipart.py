@@ -142,7 +142,7 @@ async def test_multipart_complete():
     xml_data = call_args[1]["data"].decode()
     assert "<CompleteMultipartUpload>" in xml_data
     assert "<PartNumber>1</PartNumber>" in xml_data
-    assert "<ETag>\"etag1\"</ETag>" in xml_data
+    assert '<ETag>"etag1"</ETag>' in xml_data
     assert "<PartNumber>2</PartNumber>" in xml_data
 
     # Check result

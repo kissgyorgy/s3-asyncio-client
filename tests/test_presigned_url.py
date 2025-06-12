@@ -28,7 +28,9 @@ def test_generate_presigned_url_basic():
         query_params=None,
     )
 
-    assert url == "https://test-bucket.s3.us-east-1.amazonaws.com/test-key?signed-params"
+    assert (
+        url == "https://test-bucket.s3.us-east-1.amazonaws.com/test-key?signed-params"
+    )
 
 
 def test_generate_presigned_url_with_params():
@@ -62,10 +64,7 @@ def test_generate_presigned_url_with_params():
 def test_generate_presigned_url_custom_endpoint():
     """Test presigned URL generation with custom endpoint."""
     client = S3Client(
-        "test-key",
-        "test-secret",
-        "us-east-1",
-        endpoint_url="https://minio.example.com"
+        "test-key", "test-secret", "us-east-1", endpoint_url="https://minio.example.com"
     )
 
     client._auth.create_presigned_url = Mock(
