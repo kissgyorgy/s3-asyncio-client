@@ -1,25 +1,35 @@
 """Unit tests for put_object method."""
 
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
 from s3_asyncio_client import S3Client
 
 
 @pytest.mark.asyncio
-async def test_put_object_headers():
+async def test_put_object_headers(monkeypatch):
     """Test that put_object sets correct headers."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock the _make_request method
-    mock_response = Mock()
-    mock_response.headers = {
-        "ETag": '"abcd1234"',
-        "x-amz-version-id": "version123",
-    }
+    class MockResponse:
+        headers = {
+            "ETag": '"abcd1234"',
+            "x-amz-version-id": "version123",
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     data = b"Hello, World!"
     metadata = {"author": "test", "purpose": "testing"}
@@ -33,15 +43,15 @@ async def test_put_object_headers():
     )
 
     # Check that _make_request was called with correct parameters
-    client._make_request.assert_called_once()
-    call_args = client._make_request.call_args
+    assert len(calls) == 1
+    call_args = calls[0]
 
-    assert call_args[1]["method"] == "PUT"
-    assert call_args[1]["bucket"] == "test-bucket"
-    assert call_args[1]["key"] == "test-key"
-    assert call_args[1]["data"] == data
+    assert call_args["method"] == "PUT"
+    assert call_args["bucket"] == "test-bucket"
+    assert call_args["key"] == "test-key"
+    assert call_args["data"] == data
 
-    headers = call_args[1]["headers"]
+    headers = call_args["headers"]
     assert headers["Content-Type"] == "text/plain"
     assert headers["Content-Length"] == str(len(data))
     assert headers["x-amz-meta-author"] == "test"
@@ -53,21 +63,34 @@ async def test_put_object_headers():
 
 
 @pytest.mark.asyncio
-async def test_put_object_minimal():
+async def test_put_object_minimal(monkeypatch):
     """Test put_object with minimal parameters."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    mock_response = Mock()
-    mock_response.headers = {"ETag": '"minimal"'}
+    class MockResponse:
+        headers = {"ETag": '"minimal"'}
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     data = b"minimal data"
     result = await client.put_object("bucket", "key", data)
 
     # Check that minimal headers are set
-    call_args = client._make_request.call_args
-    headers = call_args[1]["headers"]
+    assert len(calls) == 1
+    call_args = calls[0]
+    headers = call_args["headers"]
 
     assert "Content-Length" in headers
     assert headers["Content-Length"] == str(len(data))

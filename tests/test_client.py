@@ -181,18 +181,32 @@ async def test_context_manager():
 
 
 @pytest.mark.asyncio
-async def test_methods_are_implemented(client):
+async def test_methods_are_implemented(client, monkeypatch):
     """Test that methods are implemented and don't raise NotImplementedError."""
     # Mock the _make_request method to avoid actual network calls
-    from unittest.mock import AsyncMock, Mock
 
-    mock_response = Mock()
-    mock_response.headers = {"ETag": '"test"'}
-    mock_response.read = AsyncMock(return_value=b"test")
-    mock_response.text = AsyncMock(return_value="<xml>test</xml>")
+    class MockResponse:
+        headers = {"ETag": '"test"'}
 
-    client._make_request = AsyncMock(return_value=mock_response)
-    client._auth.create_presigned_url = Mock(return_value="https://example.com")
+        async def read(self):
+            return b"test"
+
+        async def text(self):
+            return "<xml>test</xml>"
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    def mock_create_presigned_url(**kwargs):
+        return "https://example.com"
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
+    monkeypatch.setattr(client._auth, "create_presigned_url", mock_create_presigned_url)
 
     # These should not raise NotImplementedError anymore
     await client.put_object("bucket", "key", b"data")

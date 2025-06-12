@@ -1,27 +1,37 @@
 """Unit tests for head_object method."""
 
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
 from s3_asyncio_client import S3Client
 
 
 @pytest.mark.asyncio
-async def test_head_object_basic():
+async def test_head_object_basic(monkeypatch):
     """Test basic head_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock the response
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Type": "text/plain",
-        "Content-Length": "13",
-        "ETag": '"abc123"',
-        "Last-Modified": "Wed, 12 Oct 2023 17:50:00 GMT",
-    }
+    class MockResponse:
+        headers = {
+            "Content-Type": "text/plain",
+            "Content-Length": "13",
+            "ETag": '"abc123"',
+            "Last-Modified": "Wed, 12 Oct 2023 17:50:00 GMT",
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.head_object(
         bucket="test-bucket",
@@ -29,11 +39,12 @@ async def test_head_object_basic():
     )
 
     # Check that _make_request was called correctly
-    client._make_request.assert_called_once_with(
-        method="HEAD",
-        bucket="test-bucket",
-        key="test-key",
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "HEAD",
+        "bucket": "test-bucket",
+        "key": "test-key",
+    }
 
     # Check result (should be like get_object but without body)
     assert result["content_type"] == "text/plain"
@@ -47,23 +58,31 @@ async def test_head_object_basic():
 
 
 @pytest.mark.asyncio
-async def test_head_object_with_metadata():
+async def test_head_object_with_metadata(monkeypatch):
     """Test head_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock the response with metadata headers
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Type": "application/json",
-        "Content-Length": "25",
-        "ETag": '"def456"',
-        "x-amz-meta-author": "test-user",
-        "x-amz-meta-purpose": "testing",
-        "x-amz-version-id": "version123",
-        "x-amz-server-side-encryption": "AES256",
-    }
+    class MockResponse:
+        headers = {
+            "Content-Type": "application/json",
+            "Content-Length": "25",
+            "ETag": '"def456"',
+            "x-amz-meta-author": "test-user",
+            "x-amz-meta-purpose": "testing",
+            "x-amz-version-id": "version123",
+            "x-amz-server-side-encryption": "AES256",
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.head_object("test-bucket", "test-key")
 

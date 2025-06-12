@@ -1,28 +1,40 @@
 """Unit tests for get_object method."""
 
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
 from s3_asyncio_client import S3Client
 
 
 @pytest.mark.asyncio
-async def test_get_object_basic():
+async def test_get_object_basic(monkeypatch):
     """Test basic get_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock the response
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Type": "text/plain",
-        "Content-Length": "13",
-        "ETag": '"abc123"',
-        "Last-Modified": "Wed, 12 Oct 2023 17:50:00 GMT",
-    }
-    mock_response.read = AsyncMock(return_value=b"Hello, World!")
+    class MockResponse:
+        headers = {
+            "Content-Type": "text/plain",
+            "Content-Length": "13",
+            "ETag": '"abc123"',
+            "Last-Modified": "Wed, 12 Oct 2023 17:50:00 GMT",
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        async def read(self):
+            return b"Hello, World!"
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object(
         bucket="test-bucket",
@@ -30,11 +42,12 @@ async def test_get_object_basic():
     )
 
     # Check that _make_request was called correctly
-    client._make_request.assert_called_once_with(
-        method="GET",
-        bucket="test-bucket",
-        key="test-key",
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "GET",
+        "bucket": "test-bucket",
+        "key": "test-key",
+    }
 
     # Check result
     assert result["body"] == b"Hello, World!"
@@ -48,24 +61,34 @@ async def test_get_object_basic():
 
 
 @pytest.mark.asyncio
-async def test_get_object_with_metadata():
+async def test_get_object_with_metadata(monkeypatch):
     """Test get_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock the response with metadata headers
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Type": "application/json",
-        "Content-Length": "25",
-        "ETag": '"def456"',
-        "x-amz-meta-author": "test-user",
-        "x-amz-meta-purpose": "testing",
-        "x-amz-version-id": "version123",
-        "x-amz-server-side-encryption": "AES256",
-    }
-    mock_response.read = AsyncMock(return_value=b'{"message": "Hello"}')
+    class MockResponse:
+        headers = {
+            "Content-Type": "application/json",
+            "Content-Length": "25",
+            "ETag": '"def456"',
+            "x-amz-meta-author": "test-user",
+            "x-amz-meta-purpose": "testing",
+            "x-amz-version-id": "version123",
+            "x-amz-server-side-encryption": "AES256",
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        async def read(self):
+            return b'{"message": "Hello"}'
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object("test-bucket", "test-key")
 
@@ -78,18 +101,28 @@ async def test_get_object_with_metadata():
 
 
 @pytest.mark.asyncio
-async def test_get_object_empty_content():
+async def test_get_object_empty_content(monkeypatch):
     """Test get_object with empty content."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Length": "0",
-        "ETag": '"empty"',
-    }
-    mock_response.read = AsyncMock(return_value=b"")
+    class MockResponse:
+        headers = {
+            "Content-Length": "0",
+            "ETag": '"empty"',
+        }
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        async def read(self):
+            return b""
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object("test-bucket", "empty-key")
 
@@ -99,20 +132,31 @@ async def test_get_object_empty_content():
 
 
 @pytest.mark.asyncio
-async def test_get_object_binary_data():
+async def test_get_object_binary_data(monkeypatch):
     """Test get_object with binary data."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     binary_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"  # PNG header
-    mock_response = Mock()
-    mock_response.headers = {
-        "Content-Type": "image/png",
-        "Content-Length": str(len(binary_data)),
-        "ETag": '"binary123"',
-    }
-    mock_response.read = AsyncMock(return_value=binary_data)
 
-    client._make_request = AsyncMock(return_value=mock_response)
+    class MockResponse:
+        headers = {
+            "Content-Type": "image/png",
+            "Content-Length": str(len(binary_data)),
+            "ETag": '"binary123"',
+        }
+
+        async def read(self):
+            return binary_data
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object("test-bucket", "image.png")
 
@@ -122,16 +166,26 @@ async def test_get_object_binary_data():
 
 
 @pytest.mark.asyncio
-async def test_get_object_missing_headers():
+async def test_get_object_missing_headers(monkeypatch):
     """Test get_object when some headers are missing."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock response with minimal headers
-    mock_response = Mock()
-    mock_response.headers = {}  # No headers
-    mock_response.read = AsyncMock(return_value=b"minimal")
+    class MockResponse:
+        headers = {}  # No headers
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        async def read(self):
+            return b"minimal"
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object("test-bucket", "minimal-key")
 

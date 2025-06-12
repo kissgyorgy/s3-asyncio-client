@@ -1,14 +1,12 @@
 """Unit tests for list_objects method."""
 
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
 from s3_asyncio_client import S3Client
 
 
 @pytest.mark.asyncio
-async def test_list_objects_basic():
+async def test_list_objects_basic(monkeypatch):
     """Test basic list_objects functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
@@ -36,19 +34,33 @@ async def test_list_objects_basic():
         </Contents>
     </ListBucketResult>"""
 
-    mock_response = Mock()
-    mock_response.text = AsyncMock(return_value=xml_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.list_objects("test-bucket")
 
     # Check that _make_request was called correctly
-    client._make_request.assert_called_once_with(
-        method="GET",
-        bucket="test-bucket",
-        params={"list-type": "2", "max-keys": "1000"},
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "GET",
+        "bucket": "test-bucket",
+        "params": {"list-type": "2", "max-keys": "1000"},
+    }
 
     # Check result
     assert len(result["objects"]) == 2
@@ -67,35 +79,50 @@ async def test_list_objects_basic():
 
 
 @pytest.mark.asyncio
-async def test_list_objects_with_prefix():
+async def test_list_objects_with_prefix(monkeypatch):
     """Test list_objects with prefix filter."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    mock_response = Mock()
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
         <IsTruncated>false</IsTruncated>
     </ListBucketResult>"""
-    mock_response.text = AsyncMock(return_value=xml_response)
 
-    client._make_request = AsyncMock(return_value=mock_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     await client.list_objects("test-bucket", prefix="photos/", max_keys=50)
 
     # Check that prefix and max_keys were passed correctly
-    client._make_request.assert_called_once_with(
-        method="GET",
-        bucket="test-bucket",
-        params={
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "GET",
+        "bucket": "test-bucket",
+        "params": {
             "list-type": "2",
             "max-keys": "50",
             "prefix": "photos/",
         },
-    )
+    }
 
 
 @pytest.mark.asyncio
-async def test_list_objects_with_pagination():
+async def test_list_objects_with_pagination(monkeypatch):
     """Test list_objects with continuation token."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
@@ -111,23 +138,37 @@ async def test_list_objects_with_pagination():
         </Contents>
     </ListBucketResult>"""
 
-    mock_response = Mock()
-    mock_response.text = AsyncMock(return_value=xml_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.list_objects("test-bucket", continuation_token="prev-token")
 
     # Check pagination parameters
-    client._make_request.assert_called_once_with(
-        method="GET",
-        bucket="test-bucket",
-        params={
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "GET",
+        "bucket": "test-bucket",
+        "params": {
             "list-type": "2",
             "max-keys": "1000",
             "continuation-token": "prev-token",
         },
-    )
+    }
 
     # Check pagination result
     assert result["is_truncated"] is True
@@ -135,7 +176,7 @@ async def test_list_objects_with_pagination():
 
 
 @pytest.mark.asyncio
-async def test_list_objects_empty():
+async def test_list_objects_empty(monkeypatch):
     """Test list_objects with empty result."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
@@ -144,10 +185,19 @@ async def test_list_objects_empty():
         <IsTruncated>false</IsTruncated>
     </ListBucketResult>"""
 
-    mock_response = Mock()
-    mock_response.text = AsyncMock(return_value=xml_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    async def mock_make_request(**kwargs):
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.list_objects("empty-bucket")
 

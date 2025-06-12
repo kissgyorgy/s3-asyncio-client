@@ -1,7 +1,5 @@
 """Unit tests for multipart upload functionality."""
 
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
 from s3_asyncio_client import S3Client
@@ -10,7 +8,7 @@ from s3_asyncio_client.multipart import MultipartUpload
 
 
 @pytest.mark.asyncio
-async def test_create_multipart_upload():
+async def test_create_multipart_upload(monkeypatch):
     """Test creating a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
@@ -22,10 +20,23 @@ async def test_create_multipart_upload():
         <UploadId>upload123</UploadId>
     </InitiateMultipartUploadResult>"""
 
-    mock_response = Mock()
-    mock_response.text = AsyncMock(return_value=xml_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     multipart = await client.create_multipart_upload(
         bucket="test-bucket",
@@ -35,16 +46,17 @@ async def test_create_multipart_upload():
     )
 
     # Check that request was made correctly
-    client._make_request.assert_called_once_with(
-        method="POST",
-        bucket="test-bucket",
-        key="large-file.bin",
-        headers={
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "POST",
+        "bucket": "test-bucket",
+        "key": "large-file.bin",
+        "headers": {
             "Content-Type": "application/octet-stream",
             "x-amz-meta-author": "test",
         },
-        params={"uploads": ""},
-    )
+        "params": {"uploads": ""},
+    }
 
     # Check multipart object
     assert isinstance(multipart, MultipartUpload)
@@ -54,29 +66,42 @@ async def test_create_multipart_upload():
 
 
 @pytest.mark.asyncio
-async def test_multipart_upload_part():
+async def test_multipart_upload_part(monkeypatch):
     """Test uploading a part in multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
     multipart = MultipartUpload(client, "test-bucket", "test-key", "upload123")
 
     # Mock response for upload part
-    mock_response = Mock()
-    mock_response.headers = {"ETag": '"part1etag"'}
+    class MockResponse:
+        headers = {"ETag": '"part1etag"'}
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     part_data = b"x" * (5 * 1024 * 1024)  # 5MB
     result = await multipart.upload_part(1, part_data)
 
     # Check request
-    client._make_request.assert_called_once_with(
-        method="PUT",
-        bucket="test-bucket",
-        key="test-key",
-        headers={"Content-Length": str(len(part_data))},
-        params={"partNumber": "1", "uploadId": "upload123"},
-        data=part_data,
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "PUT",
+        "bucket": "test-bucket",
+        "key": "test-key",
+        "headers": {"Content-Length": str(len(part_data))},
+        "params": {"partNumber": "1", "uploadId": "upload123"},
+        "data": part_data,
+    }
 
     # Check result
     assert result["part_number"] == 1
@@ -102,7 +127,7 @@ async def test_multipart_upload_invalid_part_number():
 
 
 @pytest.mark.asyncio
-async def test_multipart_complete():
+async def test_multipart_complete(monkeypatch):
     """Test completing a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
     multipart = MultipartUpload(client, "test-bucket", "test-key", "upload123")
@@ -122,24 +147,37 @@ async def test_multipart_complete():
         <ETag>"final-etag"</ETag>
     </CompleteMultipartUploadResult>"""
 
-    mock_response = Mock()
-    mock_response.text = AsyncMock(return_value=xml_response)
+    class MockResponse:
+        async def text(self):
+            return xml_response
 
-    client._make_request = AsyncMock(return_value=mock_response)
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await multipart.complete()
 
     # Check that completion request was made
-    client._make_request.assert_called_once()
-    call_args = client._make_request.call_args
+    assert len(calls) == 1
+    call_args = calls[0]
 
-    assert call_args[1]["method"] == "POST"
-    assert call_args[1]["bucket"] == "test-bucket"
-    assert call_args[1]["key"] == "test-key"
-    assert call_args[1]["params"] == {"uploadId": "upload123"}
+    assert call_args["method"] == "POST"
+    assert call_args["bucket"] == "test-bucket"
+    assert call_args["key"] == "test-key"
+    assert call_args["params"] == {"uploadId": "upload123"}
 
     # Check XML payload
-    xml_data = call_args[1]["data"].decode()
+    xml_data = call_args["data"].decode()
     assert "<CompleteMultipartUpload>" in xml_data
     assert "<PartNumber>1</PartNumber>" in xml_data
     assert '<ETag>"etag1"</ETag>' in xml_data
@@ -164,7 +202,7 @@ async def test_multipart_complete_no_parts():
 
 
 @pytest.mark.asyncio
-async def test_multipart_abort():
+async def test_multipart_abort(monkeypatch):
     """Test aborting a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
     multipart = MultipartUpload(client, "test-bucket", "test-key", "upload123")
@@ -172,30 +210,49 @@ async def test_multipart_abort():
     # Add some parts
     multipart.parts = [{"part_number": 1, "etag": "etag1", "size": 5000000}]
 
-    mock_response = Mock()
-    client._make_request = AsyncMock(return_value=mock_response)
+    class MockResponse:
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     await multipart.abort()
 
     # Check abort request
-    client._make_request.assert_called_once_with(
-        method="DELETE",
-        bucket="test-bucket",
-        key="test-key",
-        params={"uploadId": "upload123"},
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "method": "DELETE",
+        "bucket": "test-bucket",
+        "key": "test-key",
+        "params": {"uploadId": "upload123"},
+    }
 
     # Check that parts list is cleared
     assert len(multipart.parts) == 0
 
 
 @pytest.mark.asyncio
-async def test_upload_file_multipart_small_file():
+async def test_upload_file_multipart_small_file(monkeypatch):
     """Test multipart upload with file smaller than part size."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock put_object for small file
-    client.put_object = AsyncMock(return_value={"etag": "small-file-etag"})
+    calls = []
+
+    async def mock_put_object(**kwargs):
+        calls.append(kwargs)
+        return {"etag": "small-file-etag"}
+
+    monkeypatch.setattr(client, "put_object", mock_put_object)
 
     small_data = b"x" * 1000  # 1KB file
     result = await client.upload_file_multipart(
@@ -205,29 +262,48 @@ async def test_upload_file_multipart_small_file():
     )
 
     # Should use regular put_object
-    client.put_object.assert_called_once_with(
-        bucket="test-bucket",
-        key="small-file.txt",
-        data=small_data,
-        content_type=None,
-        metadata=None,
-    )
+    assert len(calls) == 1
+    assert calls[0] == {
+        "bucket": "test-bucket",
+        "key": "small-file.txt",
+        "data": small_data,
+        "content_type": None,
+        "metadata": None,
+    }
 
     assert result["etag"] == "small-file-etag"
 
 
 @pytest.mark.asyncio
-async def test_upload_file_multipart_large_file():
+async def test_upload_file_multipart_large_file(monkeypatch):
     """Test multipart upload with large file."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     # Mock all the multipart operations
-    mock_multipart = Mock()
-    mock_multipart.upload_part = AsyncMock()
-    mock_multipart.complete = AsyncMock(return_value={"etag": "large-file-etag"})
-    mock_multipart.abort = AsyncMock()
+    upload_part_calls = []
+    complete_calls = []
+    abort_calls = []
 
-    client.create_multipart_upload = AsyncMock(return_value=mock_multipart)
+    class MockMultipart:
+        async def upload_part(self, part_number, data):
+            upload_part_calls.append((part_number, data))
+
+        async def complete(self):
+            complete_calls.append(True)
+            return {"etag": "large-file-etag"}
+
+        async def abort(self):
+            abort_calls.append(True)
+
+    mock_multipart = MockMultipart()
+
+    create_multipart_calls = []
+
+    async def mock_create_multipart_upload(**kwargs):
+        create_multipart_calls.append(kwargs)
+        return mock_multipart
+
+    monkeypatch.setattr(client, "create_multipart_upload", mock_create_multipart_upload)
 
     # Create data larger than 5MB
     large_data = b"x" * (10 * 1024 * 1024)  # 10MB
@@ -239,28 +315,29 @@ async def test_upload_file_multipart_large_file():
     )
 
     # Check multipart upload was created
-    client.create_multipart_upload.assert_called_once_with(
-        bucket="test-bucket",
-        key="large-file.bin",
-        content_type=None,
-        metadata=None,
-    )
+    assert len(create_multipart_calls) == 1
+    assert create_multipart_calls[0] == {
+        "bucket": "test-bucket",
+        "key": "large-file.bin",
+        "content_type": None,
+        "metadata": None,
+    }
 
     # Check parts were uploaded (10MB with 5MB parts = 2 parts)
-    assert mock_multipart.upload_part.call_count == 2
+    assert len(upload_part_calls) == 2
 
     # Check first part (5MB)
-    first_call = mock_multipart.upload_part.call_args_list[0]
-    assert first_call[0][0] == 1  # part number
-    assert len(first_call[0][1]) == 5 * 1024 * 1024  # part size
+    first_call = upload_part_calls[0]
+    assert first_call[0] == 1  # part number
+    assert len(first_call[1]) == 5 * 1024 * 1024  # part size
 
     # Check second part (5MB)
-    second_call = mock_multipart.upload_part.call_args_list[1]
-    assert second_call[0][0] == 2  # part number
-    assert len(second_call[0][1]) == 5 * 1024 * 1024  # part size
+    second_call = upload_part_calls[1]
+    assert second_call[0] == 2  # part number
+    assert len(second_call[1]) == 5 * 1024 * 1024  # part size
 
     # Check completion
-    mock_multipart.complete.assert_called_once()
+    assert len(complete_calls) == 1
     assert result["etag"] == "large-file-etag"
 
 
