@@ -125,10 +125,11 @@ class AWSSignatureV4:
         # Create signed headers list
         signed_headers = ";".join(sorted([k.lower() for k in headers.keys()]))
 
-        # Create query string
+        # Create query string for canonical request
+        # AWS requires ALL characters to be encoded except unreserved ones
         query_string = "&".join(
             [
-                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(str(v), safe='')}"
                 for k, v in sorted(query_params.items())
             ]
         )

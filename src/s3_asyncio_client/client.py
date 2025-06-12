@@ -486,9 +486,12 @@ class S3Client:
         response.close()
         root = ET.fromstring(response_text)
 
+        # Try to find UploadId with namespace first, then without
         upload_id_elem = root.find(
             ".//{http://s3.amazonaws.com/doc/2006-03-01/}UploadId"
         )
+        if upload_id_elem is None:
+            upload_id_elem = root.find(".//UploadId")
         if upload_id_elem is None:
             raise S3ClientError("No UploadId in response")
 

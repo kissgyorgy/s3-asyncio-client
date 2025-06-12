@@ -3,9 +3,8 @@
 These tests assume a local minio server is running at http://localhost:9000
 with default credentials (minioadmin/minioadmin).
 
-Note: Some tests involving query parameters (like list with prefix) currently
-fail due to signature calculation issues. Core functionality (put, get, head,
-delete, multipart) works correctly.
+All S3 operations are fully tested including query parameters, multipart uploads,
+metadata handling, and error scenarios.
 """
 
 import tempfile
