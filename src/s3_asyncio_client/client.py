@@ -486,7 +486,9 @@ class S3Client:
         response.close()
         root = ET.fromstring(response_text)
 
-        upload_id_elem = root.find("UploadId")
+        upload_id_elem = root.find(
+            ".//{http://s3.amazonaws.com/doc/2006-03-01/}UploadId"
+        )
         if upload_id_elem is None:
             raise S3ClientError("No UploadId in response")
 

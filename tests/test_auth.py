@@ -87,7 +87,7 @@ def test_sign_request(mock_datetime, auth):
     """Test request signing."""
     # Mock datetime
     mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.utcnow.return_value = mock_now
+    mock_datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -114,7 +114,7 @@ def test_sign_request_with_payload(mock_datetime, auth):
     """Test request signing with payload."""
     # Mock datetime
     mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.utcnow.return_value = mock_now
+    mock_datetime.now.return_value = mock_now
 
     method = "PUT"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -132,7 +132,7 @@ def test_sign_request_with_query_params(mock_datetime, auth):
     """Test request signing with query parameters."""
     # Mock datetime
     mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.utcnow.return_value = mock_now
+    mock_datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -149,7 +149,7 @@ def test_create_presigned_url(mock_datetime, auth):
     """Test presigned URL creation."""
     # Mock datetime
     mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.utcnow.return_value = mock_now
+    mock_datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
@@ -180,7 +180,7 @@ def test_create_presigned_url_with_query_params(mock_datetime, auth):
     """Test presigned URL creation with additional query parameters."""
     # Mock datetime
     mock_now = datetime(2023, 1, 1, 12, 0, 0)
-    mock_datetime.utcnow.return_value = mock_now
+    mock_datetime.now.return_value = mock_now
 
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"

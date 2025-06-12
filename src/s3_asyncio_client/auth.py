@@ -3,7 +3,7 @@
 import hashlib
 import hmac
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AWSSignatureV4:
@@ -109,7 +109,7 @@ class AWSSignatureV4:
         uri = parsed_url.path or "/"
 
         # Create timestamp
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
@@ -185,7 +185,7 @@ class AWSSignatureV4:
         parsed_url = urllib.parse.urlparse(url)
 
         # Create timestamp
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
