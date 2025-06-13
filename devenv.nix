@@ -22,6 +22,10 @@
     just
   ];
 
+  process.manager = {
+    implementation = "mprocs";
+  };
+
   processes = {
     minio.exec = "minio server ${config.devenv.root}/tmp/minio-data --console-address :9001";
     docs.exec = "mkdocs serve";

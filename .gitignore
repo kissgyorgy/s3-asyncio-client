@@ -84,3 +84,6 @@ devenv.local.nix
 
 # Temporary files and test scripts
 tmp/
+
+# Process manager logs
+mprocs.log
