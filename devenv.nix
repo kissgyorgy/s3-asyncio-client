@@ -18,6 +18,8 @@
     # Testing tools for S3 compatibility
     minio
     minio-client
+    # Command runner
+    just
   ];
 
   scripts = {
