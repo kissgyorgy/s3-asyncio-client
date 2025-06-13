@@ -7,7 +7,6 @@ from s3_asyncio_client.exceptions import S3ClientError
 from s3_asyncio_client.multipart import MultipartUpload
 
 
-@pytest.mark.asyncio
 async def test_create_multipart_upload(monkeypatch):
     """Test creating a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -65,7 +64,6 @@ async def test_create_multipart_upload(monkeypatch):
     assert multipart.upload_id == "upload123"
 
 
-@pytest.mark.asyncio
 async def test_multipart_upload_part(monkeypatch):
     """Test uploading a part in multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -113,7 +111,6 @@ async def test_multipart_upload_part(monkeypatch):
     assert multipart.parts[0]["part_number"] == 1
 
 
-@pytest.mark.asyncio
 async def test_multipart_upload_invalid_part_number():
     """Test upload part with invalid part number."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -126,7 +123,6 @@ async def test_multipart_upload_invalid_part_number():
         await multipart.upload_part(10001, b"data")
 
 
-@pytest.mark.asyncio
 async def test_multipart_complete(monkeypatch):
     """Test completing a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -191,7 +187,6 @@ async def test_multipart_complete(monkeypatch):
     assert result["parts_count"] == 2
 
 
-@pytest.mark.asyncio
 async def test_multipart_complete_no_parts():
     """Test completing multipart upload with no parts."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -201,7 +196,6 @@ async def test_multipart_complete_no_parts():
         await multipart.complete()
 
 
-@pytest.mark.asyncio
 async def test_multipart_abort(monkeypatch):
     """Test aborting a multipart upload."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -240,7 +234,6 @@ async def test_multipart_abort(monkeypatch):
     assert len(multipart.parts) == 0
 
 
-@pytest.mark.asyncio
 async def test_upload_file_multipart_small_file(monkeypatch):
     """Test multipart upload with file smaller than part size."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -274,7 +267,6 @@ async def test_upload_file_multipart_small_file(monkeypatch):
     assert result["etag"] == "small-file-etag"
 
 
-@pytest.mark.asyncio
 async def test_upload_file_multipart_large_file(monkeypatch):
     """Test multipart upload with large file."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -341,7 +333,6 @@ async def test_upload_file_multipart_large_file(monkeypatch):
     assert result["etag"] == "large-file-etag"
 
 
-@pytest.mark.asyncio
 async def test_upload_file_multipart_invalid_part_size():
     """Test multipart upload with invalid part size."""
     client = S3Client("test-key", "test-secret", "us-east-1")

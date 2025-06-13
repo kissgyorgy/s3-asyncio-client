@@ -5,7 +5,6 @@ import pytest
 from s3_asyncio_client import S3Client
 
 
-@pytest.mark.asyncio
 async def test_head_object_basic(monkeypatch):
     """Test basic head_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -57,7 +56,6 @@ async def test_head_object_basic(monkeypatch):
     assert "body" not in result  # HEAD doesn't include body
 
 
-@pytest.mark.asyncio
 async def test_head_object_with_metadata(monkeypatch):
     """Test head_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")

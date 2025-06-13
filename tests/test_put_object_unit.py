@@ -5,7 +5,6 @@ import pytest
 from s3_asyncio_client import S3Client
 
 
-@pytest.mark.asyncio
 async def test_put_object_headers(monkeypatch):
     """Test that put_object sets correct headers."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -62,7 +61,6 @@ async def test_put_object_headers(monkeypatch):
     assert result["version_id"] == "version123"
 
 
-@pytest.mark.asyncio
 async def test_put_object_minimal(monkeypatch):
     """Test put_object with minimal parameters."""
     client = S3Client("test-key", "test-secret", "us-east-1")

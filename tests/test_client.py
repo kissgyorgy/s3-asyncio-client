@@ -180,7 +180,6 @@ async def test_context_manager():
     # Session should be closed after exiting context
 
 
-@pytest.mark.asyncio
 async def test_methods_are_implemented(client, monkeypatch):
     """Test that methods are implemented and don't raise NotImplementedError."""
     # Mock the _make_request method to avoid actual network calls
@@ -216,7 +215,6 @@ async def test_methods_are_implemented(client, monkeypatch):
     client.generate_presigned_url("GET", "bucket", "key")
 
 
-@pytest.mark.asyncio
 async def test_ensure_session(client):
     """Test session creation."""
     assert client._session is None
@@ -225,7 +223,6 @@ async def test_ensure_session(client):
     await client.close()
 
 
-@pytest.mark.asyncio
 async def test_close_session(client):
     """Test session cleanup."""
     await client._ensure_session()

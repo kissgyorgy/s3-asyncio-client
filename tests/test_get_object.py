@@ -5,7 +5,6 @@ import pytest
 from s3_asyncio_client import S3Client
 
 
-@pytest.mark.asyncio
 async def test_get_object_basic(monkeypatch):
     """Test basic get_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -60,7 +59,6 @@ async def test_get_object_basic(monkeypatch):
     assert result["metadata"] == {}
 
 
-@pytest.mark.asyncio
 async def test_get_object_with_metadata(monkeypatch):
     """Test get_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -100,7 +98,6 @@ async def test_get_object_with_metadata(monkeypatch):
     assert result["content_type"] == "application/json"
 
 
-@pytest.mark.asyncio
 async def test_get_object_empty_content(monkeypatch):
     """Test get_object with empty content."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -131,7 +128,6 @@ async def test_get_object_empty_content(monkeypatch):
     assert result["etag"] == "empty"
 
 
-@pytest.mark.asyncio
 async def test_get_object_binary_data(monkeypatch):
     """Test get_object with binary data."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -165,7 +161,6 @@ async def test_get_object_binary_data(monkeypatch):
     assert result["content_length"] == len(binary_data)
 
 
-@pytest.mark.asyncio
 async def test_get_object_missing_headers(monkeypatch):
     """Test get_object when some headers are missing."""
     client = S3Client("test-key", "test-secret", "us-east-1")

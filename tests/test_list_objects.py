@@ -5,7 +5,6 @@ import pytest
 from s3_asyncio_client import S3Client
 
 
-@pytest.mark.asyncio
 async def test_list_objects_basic(monkeypatch):
     """Test basic list_objects functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -78,7 +77,6 @@ async def test_list_objects_basic(monkeypatch):
     assert obj1["storage_class"] == "STANDARD"
 
 
-@pytest.mark.asyncio
 async def test_list_objects_with_prefix(monkeypatch):
     """Test list_objects with prefix filter."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -121,7 +119,6 @@ async def test_list_objects_with_prefix(monkeypatch):
     }
 
 
-@pytest.mark.asyncio
 async def test_list_objects_with_pagination(monkeypatch):
     """Test list_objects with continuation token."""
     client = S3Client("test-key", "test-secret", "us-east-1")
@@ -175,7 +172,6 @@ async def test_list_objects_with_pagination(monkeypatch):
     assert result["next_continuation_token"] == "token123"
 
 
-@pytest.mark.asyncio
 async def test_list_objects_empty(monkeypatch):
     """Test list_objects with empty result."""
     client = S3Client("test-key", "test-secret", "us-east-1")

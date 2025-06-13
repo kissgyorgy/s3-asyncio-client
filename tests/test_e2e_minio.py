@@ -99,7 +99,6 @@ async def ensure_test_bucket(minio_client, test_bucket):
         pass
 
 
-@pytest.mark.asyncio
 async def test_put_get_text_file(minio_client, test_bucket, test_files):
     """Test uploading and downloading a text file."""
     file_info = test_files["text"]
@@ -126,7 +125,6 @@ async def test_put_get_text_file(minio_client, test_bucket, test_files):
     assert download_result["metadata"]["test"] == "e2e"
 
 
-@pytest.mark.asyncio
 async def test_put_get_json_file(minio_client, test_bucket, test_files):
     """Test uploading and downloading a JSON file."""
     file_info = test_files["json"]
@@ -154,7 +152,6 @@ async def test_put_get_json_file(minio_client, test_bucket, test_files):
     assert parsed_json["value"] == 42
 
 
-@pytest.mark.asyncio
 async def test_put_get_binary_file(minio_client, test_bucket, test_files):
     """Test uploading and downloading a binary file."""
     file_info = test_files["binary"]
@@ -176,7 +173,6 @@ async def test_put_get_binary_file(minio_client, test_bucket, test_files):
     assert len(download_result["body"]) == 1024
 
 
-@pytest.mark.asyncio
 async def test_head_object(minio_client, test_bucket, test_files):
     """Test getting object metadata without downloading."""
     file_info = test_files["text"]
@@ -200,7 +196,6 @@ async def test_head_object(minio_client, test_bucket, test_files):
     assert head_result["metadata"]["version"] == "1.0"
 
 
-@pytest.mark.asyncio
 async def test_list_objects(minio_client, test_bucket, test_files):
     """Test listing objects with different prefixes."""
     # Upload multiple files
@@ -234,7 +229,6 @@ async def test_list_objects(minio_client, test_bucket, test_files):
         assert "last_modified" in obj
 
 
-@pytest.mark.asyncio
 async def test_multipart_upload(minio_client, test_bucket, test_files):
     """Test multipart upload with a large file."""
     file_info = test_files["large"]
@@ -271,7 +265,6 @@ async def test_multipart_upload(minio_client, test_bucket, test_files):
     assert download_result["metadata"]["test"] == "multipart"
 
 
-@pytest.mark.asyncio
 async def test_delete_object(minio_client, test_bucket, test_files):
     """Test deleting objects."""
     file_info = test_files["text"]
@@ -298,7 +291,6 @@ async def test_delete_object(minio_client, test_bucket, test_files):
         await minio_client.head_object(bucket=test_bucket, key=key)
 
 
-@pytest.mark.asyncio
 async def test_file_upload_download_cycle(minio_client, test_bucket, test_files):
     """Test complete upload/download cycle for all file types."""
     uploaded_files = []
@@ -342,7 +334,6 @@ async def test_file_upload_download_cycle(minio_client, test_bucket, test_files)
     assert len(final_list["objects"]) == 0
 
 
-@pytest.mark.asyncio
 async def test_metadata_preservation(minio_client, test_bucket, test_files):
     """Test that metadata is properly preserved through upload/download cycle."""
     file_info = test_files["text"]
@@ -381,7 +372,6 @@ async def test_metadata_preservation(minio_client, test_bucket, test_files):
     assert get_result["body"] == file_info["content"]
 
 
-@pytest.mark.asyncio
 async def test_error_handling(minio_client, test_bucket):
     """Test error handling for common failure scenarios."""
     from s3_asyncio_client.exceptions import S3NotFoundError
