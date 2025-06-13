@@ -72,6 +72,9 @@ async def test_with_moto():
     # Real S3 operations against moto mock
 ```
 
+- Never start required services like minio; always assume they are running.
+  Ask the user to start them if not running.
+
 ## Key Implementation Details
 
 ### URL Building Logic

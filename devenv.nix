@@ -22,16 +22,8 @@
     just
   ];
 
-  scripts = {
-    test.exec = "python -m pytest tests/";
-    lint.exec = "ruff check src/ tests/";
-    format.exec = "ruff format src/ tests/";
-    typecheck.exec = "mypy src/";
-    serve-minio.exec = "minio server /tmp/minio-data --console-address :9001";
-  };
-
   processes = {
-    # Optional: automatically start minio in development
-    # minio.exec = "minio server /tmp/minio-data --console-address :9001";
+    minio.exec = "minio server ${config.devenv.root}/tmp/minio-data --console-address :9001";
+    docs.exec = "mkdocs serve";
   };
 }

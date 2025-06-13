@@ -22,10 +22,6 @@ check: lint format test
 docs-build:
     mkdocs build
 
-# Serve documentation locally
-docs-serve:
-    mkdocs serve
-
 # Clean temporary files
 clean:
     find . -type d -name "__pycache__" -exec rm -rf {} +
