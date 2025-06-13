@@ -319,6 +319,30 @@ class S3Client:
         response.close()
         return result
 
+    async def create_bucket(
+        self,
+        bucket: str,
+    ) -> dict[str, Any]:
+        """Create a new S3 bucket.
+
+        Args:
+            bucket: S3 bucket name
+
+        Returns:
+            Dictionary with bucket creation information
+        """
+        response = await self._make_request(
+            method="PUT",
+            bucket=bucket,
+        )
+
+        result = {
+            "location": response.headers.get("Location"),
+        }
+
+        response.close()
+        return result
+
     async def list_objects(
         self,
         bucket: str,

@@ -16,22 +16,35 @@ from s3_asyncio_client import S3Client
 
 
 @pytest.fixture
-def test_bucket():
-    """Test bucket name for E2E tests."""
-    return "e2e-test-bucket"
-
-
-@pytest.fixture
 async def minio_client():
-    """S3Client configured for local minio instance."""
+    """S3Client with a dedicated test bucket created using create_bucket."""
     client = S3Client(
         access_key="minioadmin",
         secret_key="minioadmin",
         region="us-east-1",
         endpoint_url="http://localhost:9000",
     )
+
+    bucket_name = "e2e-created-test-bucket"
+
     async with client:
-        yield client
+        # Create the bucket using our new method (ignore if already exists)
+        try:
+            await client.create_bucket(bucket_name)
+        except Exception:
+            # Bucket already exists, which is fine
+            pass
+
+        # Yield client and bucket info
+        yield {"client": client, "bucket": bucket_name}
+
+        # Cleanup: Delete all objects in the bucket
+        try:
+            result = await client.list_objects(bucket_name, max_keys=1000)
+            for obj in result["objects"]:
+                await client.delete_object(bucket_name, obj["key"])
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 @pytest.fixture
@@ -85,28 +98,44 @@ def test_files():
         yield files
 
 
-@pytest.fixture(autouse=True)
-async def ensure_test_bucket(minio_client, test_bucket):
-    """Ensure test bucket exists and is clean before each test."""
-    # Clean up any existing objects if bucket exists
-    try:
-        result = await minio_client.list_objects(test_bucket, max_keys=1000)
-        for obj in result["objects"]:
-            await minio_client.delete_object(test_bucket, obj["key"])
-    except Exception:
-        # Bucket doesn't exist or other error, which is fine
-        # minio will auto-create buckets on first put
-        pass
+async def test_create_bucket_fixture(minio_client):
+    """Test that the fixture with create_bucket works."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
+
+    # Test that we can list objects in the created bucket
+    result = await client.list_objects(bucket)
+    assert "objects" in result
+    assert isinstance(result["objects"], list)
+
+    # Test that we can put an object in the created bucket
+    test_data = b"Hello from session bucket test!"
+    key = "test-key.txt"
+
+    put_result = await client.put_object(
+        bucket=bucket,
+        key=key,
+        data=test_data,
+        content_type="text/plain",
+    )
+
+    assert "etag" in put_result
+
+    # Test that we can get the object back
+    get_result = await client.get_object(bucket=bucket, key=key)
+    assert get_result["body"] == test_data
 
 
-async def test_put_get_text_file(minio_client, test_bucket, test_files):
+async def test_put_get_text_file(minio_client, test_files):
     """Test uploading and downloading a text file."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["text"]
     key = "test-files/hello.txt"
 
     # Upload file
-    result = await minio_client.put_object(
-        bucket=test_bucket,
+    result = await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -117,7 +146,7 @@ async def test_put_get_text_file(minio_client, test_bucket, test_files):
     assert result["etag"]  # ETag should not be empty
 
     # Download file
-    download_result = await minio_client.get_object(bucket=test_bucket, key=key)
+    download_result = await client.get_object(bucket=bucket, key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
@@ -125,21 +154,23 @@ async def test_put_get_text_file(minio_client, test_bucket, test_files):
     assert download_result["metadata"]["test"] == "e2e"
 
 
-async def test_put_get_json_file(minio_client, test_bucket, test_files):
+async def test_put_get_json_file(minio_client, test_files):
     """Test uploading and downloading a JSON file."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["json"]
     key = "test-files/data.json"
 
     # Upload file
-    await minio_client.put_object(
-        bucket=test_bucket,
+    await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
     )
 
     # Download file
-    download_result = await minio_client.get_object(bucket=test_bucket, key=key)
+    download_result = await client.get_object(bucket=bucket, key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
@@ -152,35 +183,39 @@ async def test_put_get_json_file(minio_client, test_bucket, test_files):
     assert parsed_json["value"] == 42
 
 
-async def test_put_get_binary_file(minio_client, test_bucket, test_files):
+async def test_put_get_binary_file(minio_client, test_files):
     """Test uploading and downloading a binary file."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["binary"]
     key = "test-files/binary.dat"
 
     # Upload file
-    await minio_client.put_object(
-        bucket=test_bucket,
+    await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
     )
 
     # Download file
-    download_result = await minio_client.get_object(bucket=test_bucket, key=key)
+    download_result = await client.get_object(bucket=bucket, key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
     assert len(download_result["body"]) == 1024
 
 
-async def test_head_object(minio_client, test_bucket, test_files):
+async def test_head_object(minio_client, test_files):
     """Test getting object metadata without downloading."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["text"]
     key = "test-files/metadata-test.txt"
 
     # Upload file with metadata
-    await minio_client.put_object(
-        bucket=test_bucket,
+    await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -188,7 +223,7 @@ async def test_head_object(minio_client, test_bucket, test_files):
     )
 
     # Get metadata
-    head_result = await minio_client.head_object(bucket=test_bucket, key=key)
+    head_result = await client.head_object(bucket=bucket, key=key)
 
     assert head_result["content_type"] == file_info["content_type"]
     assert head_result["content_length"] == len(file_info["content"])
@@ -196,8 +231,10 @@ async def test_head_object(minio_client, test_bucket, test_files):
     assert head_result["metadata"]["version"] == "1.0"
 
 
-async def test_list_objects(minio_client, test_bucket, test_files):
+async def test_list_objects(minio_client, test_files):
     """Test listing objects with different prefixes."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     # Upload multiple files
     files_to_upload = [
         ("docs/readme.txt", test_files["text"]),
@@ -207,19 +244,19 @@ async def test_list_objects(minio_client, test_bucket, test_files):
     ]
 
     for key, file_info in files_to_upload:
-        await minio_client.put_object(
-            bucket=test_bucket,
+        await client.put_object(
+            bucket=bucket,
             key=key,
             data=file_info["content"],
             content_type=file_info["content_type"],
         )
 
     # List all objects
-    all_objects = await minio_client.list_objects(bucket=test_bucket)
+    all_objects = await client.list_objects(bucket=bucket)
     assert len(all_objects["objects"]) == 4
 
     # List with prefix
-    docs_objects = await minio_client.list_objects(bucket=test_bucket, prefix="docs/")
+    docs_objects = await client.list_objects(bucket=bucket, prefix="docs/")
     assert len(docs_objects["objects"]) == 2
 
     # Verify object details
@@ -229,14 +266,16 @@ async def test_list_objects(minio_client, test_bucket, test_files):
         assert "last_modified" in obj
 
 
-async def test_multipart_upload(minio_client, test_bucket, test_files):
+async def test_multipart_upload(minio_client, test_files):
     """Test multipart upload with a large file."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["large"]
     key = "large-files/big-file.bin"
 
     # Create multipart upload
-    multipart = await minio_client.create_multipart_upload(
-        bucket=test_bucket,
+    multipart = await client.create_multipart_upload(
+        bucket=bucket,
         key=key,
         content_type=file_info["content_type"],
         metadata={"size": "large", "test": "multipart"},
@@ -259,48 +298,52 @@ async def test_multipart_upload(minio_client, test_bucket, test_files):
     assert "location" in completion_result
 
     # Verify the uploaded file
-    download_result = await minio_client.get_object(bucket=test_bucket, key=key)
+    download_result = await client.get_object(bucket=bucket, key=key)
     assert download_result["body"] == file_info["content"]
     assert download_result["metadata"]["size"] == "large"
     assert download_result["metadata"]["test"] == "multipart"
 
 
-async def test_delete_object(minio_client, test_bucket, test_files):
+async def test_delete_object(minio_client, test_files):
     """Test deleting objects."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["text"]
     key = "temp/delete-me.txt"
 
     # Upload file
-    await minio_client.put_object(
-        bucket=test_bucket,
+    await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
     )
 
     # Verify file exists
-    head_result = await minio_client.head_object(bucket=test_bucket, key=key)
+    head_result = await client.head_object(bucket=bucket, key=key)
     assert head_result["content_length"] == len(file_info["content"])
 
     # Delete file
-    delete_result = await minio_client.delete_object(bucket=test_bucket, key=key)
+    delete_result = await client.delete_object(bucket=bucket, key=key)
     assert isinstance(delete_result, dict)
 
     # Verify file is gone
     with pytest.raises(Exception):  # Should raise S3NotFoundError
-        await minio_client.head_object(bucket=test_bucket, key=key)
+        await client.head_object(bucket=bucket, key=key)
 
 
-async def test_file_upload_download_cycle(minio_client, test_bucket, test_files):
+async def test_file_upload_download_cycle(minio_client, test_files):
     """Test complete upload/download cycle for all file types."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     uploaded_files = []
 
     # Upload all test files
     for file_type, file_info in test_files.items():
         key = f"cycle-test/{file_type}-file"
 
-        await minio_client.put_object(
-            bucket=test_bucket,
+        await client.put_object(
+            bucket=bucket,
             key=key,
             data=file_info["content"],
             content_type=file_info["content_type"],
@@ -310,14 +353,12 @@ async def test_file_upload_download_cycle(minio_client, test_bucket, test_files)
         uploaded_files.append((key, file_info))
 
     # List all uploaded files
-    list_result = await minio_client.list_objects(
-        bucket=test_bucket, prefix="cycle-test/"
-    )
+    list_result = await client.list_objects(bucket=bucket, prefix="cycle-test/")
     assert len(list_result["objects"]) == len(test_files)
 
     # Download and verify each file
     for key, original_file_info in uploaded_files:
-        download_result = await minio_client.get_object(bucket=test_bucket, key=key)
+        download_result = await client.get_object(bucket=bucket, key=key)
 
         assert download_result["body"] == original_file_info["content"]
         assert download_result["content_type"] == original_file_info["content_type"]
@@ -325,17 +366,17 @@ async def test_file_upload_download_cycle(minio_client, test_bucket, test_files)
 
     # Clean up - delete all test files
     for key, _ in uploaded_files:
-        await minio_client.delete_object(bucket=test_bucket, key=key)
+        await client.delete_object(bucket=bucket, key=key)
 
     # Verify cleanup
-    final_list = await minio_client.list_objects(
-        bucket=test_bucket, prefix="cycle-test/"
-    )
+    final_list = await client.list_objects(bucket=bucket, prefix="cycle-test/")
     assert len(final_list["objects"]) == 0
 
 
-async def test_metadata_preservation(minio_client, test_bucket, test_files):
+async def test_metadata_preservation(minio_client, test_files):
     """Test that metadata is properly preserved through upload/download cycle."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     file_info = test_files["text"]
     key = "metadata-test/complex-metadata.txt"
 
@@ -350,8 +391,8 @@ async def test_metadata_preservation(minio_client, test_bucket, test_files):
     }
 
     # Upload with metadata
-    await minio_client.put_object(
-        bucket=test_bucket,
+    await client.put_object(
+        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -359,12 +400,12 @@ async def test_metadata_preservation(minio_client, test_bucket, test_files):
     )
 
     # Test head_object metadata
-    head_result = await minio_client.head_object(bucket=test_bucket, key=key)
+    head_result = await client.head_object(bucket=bucket, key=key)
     for key_name, value in metadata.items():
         assert head_result["metadata"][key_name] == value
 
     # Test get_object metadata
-    get_result = await minio_client.get_object(bucket=test_bucket, key=key)
+    get_result = await client.get_object(bucket=bucket, key=key)
     for key_name, value in metadata.items():
         assert get_result["metadata"][key_name] == value
 
@@ -372,20 +413,20 @@ async def test_metadata_preservation(minio_client, test_bucket, test_files):
     assert get_result["body"] == file_info["content"]
 
 
-async def test_error_handling(minio_client, test_bucket):
+async def test_error_handling(minio_client):
     """Test error handling for common failure scenarios."""
+    client = minio_client["client"]
+    bucket = minio_client["bucket"]
     from s3_asyncio_client.exceptions import S3NotFoundError
 
     # Test getting non-existent object
     with pytest.raises(S3NotFoundError):
-        await minio_client.get_object(bucket=test_bucket, key="does-not-exist.txt")
+        await client.get_object(bucket=bucket, key="does-not-exist.txt")
 
     # Test head on non-existent object
     with pytest.raises(S3NotFoundError):
-        await minio_client.head_object(bucket=test_bucket, key="does-not-exist.txt")
+        await client.head_object(bucket=bucket, key="does-not-exist.txt")
 
     # Test delete non-existent object (should succeed - idempotent)
-    result = await minio_client.delete_object(
-        bucket=test_bucket, key="does-not-exist.txt"
-    )
+    result = await client.delete_object(bucket=bucket, key="does-not-exist.txt")
     assert isinstance(result, dict)

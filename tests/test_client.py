@@ -229,3 +229,40 @@ async def test_close_session(client):
     assert client._session is not None
     await client.close()
     assert client._session is None
+
+
+async def test_create_bucket(client, monkeypatch):
+    """Test create_bucket method."""
+
+    class MockResponse:
+        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    # Track calls to _make_request
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
+
+    result = await client.create_bucket("test-bucket")
+
+    # Check that _make_request was called with correct parameters
+    assert len(calls) == 1
+    call_args = calls[0]
+
+    assert call_args["method"] == "PUT"
+    assert call_args["bucket"] == "test-bucket"
+    assert call_args.get("key") is None  # No key for bucket creation
+    assert call_args.get("headers") is None  # No special headers needed
+    assert call_args.get("params") is None  # No query parameters needed
+    assert call_args.get("data") is None  # No data for bucket creation
+
+    # Check result
+    assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
