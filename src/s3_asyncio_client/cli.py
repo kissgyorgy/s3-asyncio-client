@@ -13,15 +13,18 @@ from .client import S3Client
 
 @click.group()
 @click.option("--config-file", help="Path to AWS config file")
+@click.option("--profile", help="AWS profile name to use (default: 'default')")
 @click.pass_context
-def cli(ctx, config_file):
+def cli(ctx, config_file, profile):
     """S3 CLI - A command line interface for S3 operations."""
     ctx.ensure_object(dict)
 
     # Create S3Client from config file or environment variables
-    if config_file:
+    if config_file or profile:
         try:
-            client = S3Client.from_aws_config(config_path=config_file)
+            client = S3Client.from_aws_config(
+                config_path=config_file, profile_name=profile or "default"
+            )
         except (FileNotFoundError, ValueError) as e:
             click.echo(f"Error loading config file: {e}", err=True)
             sys.exit(1)
