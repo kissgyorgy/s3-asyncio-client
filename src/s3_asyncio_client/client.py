@@ -58,13 +58,13 @@ class S3Client:
         Args:
             profile_name: AWS profile name to use (default: "default")
             config_path: Path to AWS config file (default: ~/.aws/config)
-            credentials_path: Path to AWS credentials file (default: ~/.aws/credentials)
+            credentials_path: Path to AWS credentials file (optional)
 
         Returns:
             Configured S3Client instance
 
         Raises:
-            FileNotFoundError: If config files don't exist
+            FileNotFoundError: If config file doesn't exist
             ValueError: If required configuration is missing
         """
         # Set default paths
@@ -73,10 +73,13 @@ class S3Client:
         else:
             config_path = pathlib.Path(config_path)
 
-        if credentials_path is None:
-            credentials_path = pathlib.Path.home() / ".aws" / "credentials"
-        else:
+        if credentials_path is not None:
             credentials_path = pathlib.Path(credentials_path)
+        else:
+            # Use default credentials path if it exists
+            default_credentials_path = pathlib.Path.home() / ".aws" / "credentials"
+            if default_credentials_path.exists():
+                credentials_path = default_credentials_path
 
         # Read configuration files
         config = configparser.ConfigParser()
@@ -93,29 +96,30 @@ class S3Client:
             if config_section in config:
                 config_data = dict(config[config_section])
 
-        # Credentials file should exist and contain the profile
-        if not credentials_path.exists():
-            raise FileNotFoundError(
-                f"AWS credentials file not found: {credentials_path}"
-            )
+        # Load credentials from file if available
+        credentials_data = {}
+        if credentials_path and credentials_path.exists():
+            credentials.read(credentials_path)
+            if profile_name in credentials:
+                credentials_data = dict(credentials[profile_name])
 
-        credentials.read(credentials_path)
-        if profile_name not in credentials:
-            raise ValueError(f"Profile '{profile_name}' not found in credentials file")
-
-        credentials_data = dict(credentials[profile_name])
-
-        # Extract required parameters
-        access_key = credentials_data.get("aws_access_key_id")
-        secret_key = credentials_data.get("aws_secret_access_key")
+        # Extract required parameters (credentials takes precedence over config)
+        access_key = credentials_data.get("aws_access_key_id") or config_data.get(
+            "aws_access_key_id"
+        )
+        secret_key = credentials_data.get("aws_secret_access_key") or config_data.get(
+            "aws_secret_access_key"
+        )
 
         if not access_key:
             raise ValueError(
-                f"aws_access_key_id not found for profile '{profile_name}'"
+                f"aws_access_key_id not found for profile '{profile_name}' "
+                f"in config or credentials files"
             )
         if not secret_key:
             raise ValueError(
-                f"aws_secret_access_key not found for profile '{profile_name}'"
+                f"aws_secret_access_key not found for profile '{profile_name}' "
+                f"in config or credentials files"
             )
 
         # Extract optional parameters (with fallbacks)

@@ -241,8 +241,29 @@ output = json
         assert client.endpoint_url == "http://localhost:9000"
 
     def test_missing_credentials_file(self, tmp_path: pathlib.Path):
-        """Test error when credentials file doesn't exist."""
-        with pytest.raises(FileNotFoundError, match="AWS credentials file not found"):
+        """Test missing credentials file works if config has credentials."""
+        config_file = tmp_path / "config"
+        config_file.write_text("""[default]
+aws_access_key_id = TESTKEY
+aws_secret_access_key = TESTSECRET
+region = us-east-1
+""")
+
+        # Should work with config file only
+        client = S3Client.from_aws_config(
+            credentials_path=tmp_path / "nonexistent", config_path=config_file
+        )
+        assert client.access_key == "TESTKEY"
+        assert client.secret_key == "TESTSECRET"
+        assert client.region == "us-east-1"
+
+    def test_no_credentials_anywhere(self, tmp_path: pathlib.Path):
+        """Test error when no credentials are found anywhere."""
+        with pytest.raises(
+            ValueError,
+            match="aws_access_key_id not found for profile 'default' "
+            "in config or credentials files",
+        ):
             S3Client.from_aws_config(credentials_path=tmp_path / "nonexistent")
 
     def test_missing_profile_in_credentials(self, tmp_path: pathlib.Path):
@@ -254,7 +275,9 @@ aws_secret_access_key = DEFAULTSECRET
 """)
 
         with pytest.raises(
-            ValueError, match="Profile 'nonexistent' not found in credentials file"
+            ValueError,
+            match="aws_access_key_id not found for profile 'nonexistent' "
+            "in config or credentials files",
         ):
             S3Client.from_aws_config(
                 profile_name="nonexistent", credentials_path=credentials_file
@@ -353,7 +376,9 @@ region = us-west-2
         config_file.write_text("")
 
         with pytest.raises(
-            ValueError, match="Profile 'default' not found in credentials file"
+            ValueError,
+            match="aws_access_key_id not found for profile 'default' "
+            "in config or credentials files",
         ):
             S3Client.from_aws_config(
                 credentials_path=credentials_file, config_path=config_file
@@ -394,8 +419,51 @@ region = us-east-1
         )
         assert client.access_key == "CASEKEY"
 
+    def test_credentials_from_config_file_only(self, tmp_path: pathlib.Path):
+        """Test loading credentials from config file only."""
+        config_file = tmp_path / "config"
+        config_file.write_text("""[default]
+aws_access_key_id = CONFIGKEY
+aws_secret_access_key = CONFIGSECRET
+region = us-west-2
+
+[profile testprofile]
+aws_access_key_id = PROFILEKEY
+aws_secret_access_key = PROFILESECRET
+region = eu-west-1
+""")
+
+        # Test default profile from config only
+        client = S3Client.from_aws_config(
+            config_path=config_file, credentials_path=None
+        )
+        assert client.access_key == "CONFIGKEY"
+        assert client.secret_key == "CONFIGSECRET"
+        assert client.region == "us-west-2"
+
+        # Test named profile from config only
+        client = S3Client.from_aws_config(
+            profile_name="testprofile", config_path=config_file, credentials_path=None
+        )
+        assert client.access_key == "PROFILEKEY"
+        assert client.secret_key == "PROFILESECRET"
+        assert client.region == "eu-west-1"
+
+    def test_case_sensitivity_continued(self, tmp_path: pathlib.Path):
+        """Test profile name case sensitivity - different case should fail."""
+        credentials_file = tmp_path / "credentials"
+        credentials_file.write_text("""[CaseSensitive]
+aws_access_key_id = CASEKEY
+aws_secret_access_key = CASESECRET
+region = us-east-1
+""")
+
         # Different case should fail
-        with pytest.raises(ValueError, match="Profile 'casesensitive' not found"):
+        with pytest.raises(
+            ValueError,
+            match="aws_access_key_id not found for profile 'casesensitive' "
+            "in config or credentials files",
+        ):
             S3Client.from_aws_config(
                 profile_name="casesensitive", credentials_path=credentials_file
             )
