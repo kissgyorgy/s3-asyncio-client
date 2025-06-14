@@ -16,6 +16,8 @@ dev = [
     "moto[s3]>=4.2.0",
     "ruff>=0.1.0",
 ]
+[project.scripts]
+s3cli = "s3_asyncio_client.cli:cli"
 
 [build-system]
 requires = ["hatchling"]

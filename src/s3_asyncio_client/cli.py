@@ -8,7 +8,7 @@ import sys
 
 import click
 
-from src.s3_asyncio_client import S3Client
+from .client import S3Client
 
 
 def get_client_from_env():
