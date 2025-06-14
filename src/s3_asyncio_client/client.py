@@ -491,7 +491,12 @@ class S3Client:
         }
 
         if prefix:
-            params["prefix"] = prefix
+            # OVH S3 service requires leading slash in prefix
+            # but returns normalized keys
+            if "ovh.net" in self.endpoint_url and not prefix.startswith("/"):
+                params["prefix"] = "/" + prefix
+            else:
+                params["prefix"] = prefix
 
         if continuation_token:
             params["continuation-token"] = continuation_token
@@ -522,8 +527,13 @@ class S3Client:
                 ".//{http://s3.amazonaws.com/doc/2006-03-01/}StorageClass"
             )
 
+            key_text = key.text if key is not None else ""
+            # Normalize key by removing leading slash if present (for OVH compatibility)
+            if key_text.startswith("/"):
+                key_text = key_text[1:]
+
             obj = {
-                "key": key.text if key is not None else "",
+                "key": key_text,
                 "last_modified": (
                     last_modified.text if last_modified is not None else ""
                 ),

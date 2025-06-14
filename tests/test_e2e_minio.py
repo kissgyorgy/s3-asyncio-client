@@ -47,14 +47,62 @@ async def client(request):
             # Bucket already exists, which is fine
             pass
 
+        # Pre-cleanup: Delete all objects in the bucket before starting tests
+        try:
+            # Paginate through all objects to ensure complete cleanup
+            continuation_token = None
+            total_deleted = 0
+            while True:
+                kwargs = {"max_keys": 1000}
+                if continuation_token:
+                    kwargs["continuation_token"] = continuation_token
+
+                result = await s3_client.list_objects(bucket_name, **kwargs)
+
+                # Delete all objects in this batch
+                for obj in result["objects"]:
+                    try:
+                        await s3_client.delete_object(bucket_name, obj["key"])
+                        total_deleted += 1
+                    except Exception:
+                        # Ignore individual delete errors but continue
+                        pass
+
+                # Check if we need to continue
+                if not result.get("is_truncated", False):
+                    break
+                continuation_token = result.get("next_continuation_token")
+
+            # Give OVH a moment to process the deletes
+            if total_deleted > 0:
+                import asyncio
+
+                await asyncio.sleep(1)
+        except Exception:
+            pass  # Ignore cleanup errors
+
         # Yield client and bucket info
         yield {"client": s3_client, "bucket": bucket_name}
 
-        # Cleanup: Delete all objects in the bucket
+        # Post-cleanup: Delete all objects in the bucket after tests
         try:
-            result = await s3_client.list_objects(bucket_name, max_keys=1000)
-            for obj in result["objects"]:
-                await s3_client.delete_object(bucket_name, obj["key"])
+            # Paginate through all objects to ensure complete cleanup
+            continuation_token = None
+            while True:
+                kwargs = {"max_keys": 1000}
+                if continuation_token:
+                    kwargs["continuation_token"] = continuation_token
+
+                result = await s3_client.list_objects(bucket_name, **kwargs)
+
+                # Delete all objects in this batch
+                for obj in result["objects"]:
+                    await s3_client.delete_object(bucket_name, obj["key"])
+
+                # Check if we need to continue
+                if not result.get("is_truncated", False):
+                    break
+                continuation_token = result.get("next_continuation_token")
         except Exception:
             pass  # Ignore cleanup errors
 
