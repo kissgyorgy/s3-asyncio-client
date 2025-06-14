@@ -1,5 +1,8 @@
 """Main S3 client implementation."""
 
+import configparser
+import os
+import pathlib
 import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -42,6 +45,106 @@ class S3Client:
 
         self._auth = AWSSignatureV4(access_key, secret_key, region)
         self._session: aiohttp.ClientSession | None = None
+
+    @classmethod
+    def from_aws_config(
+        cls,
+        profile_name: str = "default",
+        config_path: str | pathlib.Path | None = None,
+        credentials_path: str | pathlib.Path | None = None,
+    ) -> "S3Client":
+        """Create S3Client from AWS config and credentials files.
+
+        Args:
+            profile_name: AWS profile name to use (default: "default")
+            config_path: Path to AWS config file (default: ~/.aws/config)
+            credentials_path: Path to AWS credentials file (default: ~/.aws/credentials)
+
+        Returns:
+            Configured S3Client instance
+
+        Raises:
+            FileNotFoundError: If config files don't exist
+            ValueError: If required configuration is missing
+        """
+        # Set default paths
+        if config_path is None:
+            config_path = pathlib.Path.home() / ".aws" / "config"
+        else:
+            config_path = pathlib.Path(config_path)
+
+        if credentials_path is None:
+            credentials_path = pathlib.Path.home() / ".aws" / "credentials"
+        else:
+            credentials_path = pathlib.Path(credentials_path)
+
+        # Read configuration files
+        config = configparser.ConfigParser()
+        credentials = configparser.ConfigParser()
+
+        # Config file may or may not exist
+        config_data = {}
+        if config_path.exists():
+            config.read(config_path)
+            # Handle profile section names (AWS config uses "profile <name>" except for default)  # noqa: E501
+            config_section = (
+                profile_name
+                if profile_name == "default"
+                else f"profile {profile_name}"
+            )
+            if config_section in config:
+                config_data = dict(config[config_section])
+
+        # Credentials file should exist and contain the profile
+        if not credentials_path.exists():
+            raise FileNotFoundError(
+                f"AWS credentials file not found: {credentials_path}"
+            )
+
+        credentials.read(credentials_path)
+        if profile_name not in credentials:
+            raise ValueError(f"Profile '{profile_name}' not found in credentials file")
+
+        credentials_data = dict(credentials[profile_name])
+
+        # Extract required parameters
+        access_key = credentials_data.get("aws_access_key_id")
+        secret_key = credentials_data.get("aws_secret_access_key")
+
+        if not access_key:
+            raise ValueError(
+                f"aws_access_key_id not found for profile '{profile_name}'"
+            )
+        if not secret_key:
+            raise ValueError(
+                f"aws_secret_access_key not found for profile '{profile_name}'"
+            )
+
+        # Extract optional parameters (with fallbacks)
+        region = (
+            credentials_data.get("region")
+            or config_data.get("region")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+
+        endpoint_url = (
+            credentials_data.get("endpoint_url")
+            or config_data.get("endpoint_url")
+            or None
+        )
+
+        # Handle s3 section in config (for custom endpoints)
+        s3_section = config_data.get("s3")
+        if isinstance(s3_section, dict) and "endpoint_url" in s3_section:
+            endpoint_url = endpoint_url or s3_section["endpoint_url"]
+
+        return cls(
+            access_key=access_key,
+            secret_key=secret_key,
+            region=region,
+            endpoint_url=endpoint_url,
+        )
 
     async def __aenter__(self):
         """Async context manager entry."""
