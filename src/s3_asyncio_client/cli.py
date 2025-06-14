@@ -212,5 +212,39 @@ def delete(bucket, key):
     asyncio.run(_delete())
 
 
+@cli.command()
+@click.argument("bucket")
+def create_bucket(bucket):
+    """Create a new S3 bucket."""
+
+    async def _create_bucket():
+        client = get_client_from_env()
+
+        async with client:
+            result = await client.create_bucket(bucket=bucket)
+
+        click.echo("Bucket created successfully!")
+        if result.get("location"):
+            click.echo(f"Location: {result['location']}")
+
+    asyncio.run(_create_bucket())
+
+
+@cli.command()
+@click.argument("bucket")
+def delete_bucket(bucket):
+    """Delete an S3 bucket."""
+
+    async def _delete_bucket():
+        client = get_client_from_env()
+
+        async with client:
+            await client.delete_bucket(bucket=bucket)
+
+        click.echo("Bucket deleted successfully!")
+
+    asyncio.run(_delete_bucket())
+
+
 if __name__ == "__main__":
     cli()

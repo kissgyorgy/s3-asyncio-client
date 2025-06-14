@@ -88,9 +88,7 @@ class S3Client:
             config.read(config_path)
             # Handle profile section names (AWS config uses "profile <name>" except for default)  # noqa: E501
             config_section = (
-                profile_name
-                if profile_name == "default"
-                else f"profile {profile_name}"
+                profile_name if profile_name == "default" else f"profile {profile_name}"
             )
             if config_section in config:
                 config_data = dict(config[config_section])
@@ -442,6 +440,28 @@ class S3Client:
         result = {
             "location": response.headers.get("Location"),
         }
+
+        response.close()
+        return result
+
+    async def delete_bucket(
+        self,
+        bucket: str,
+    ) -> dict[str, Any]:
+        """Delete an S3 bucket.
+
+        Args:
+            bucket: S3 bucket name
+
+        Returns:
+            Dictionary with bucket deletion information
+        """
+        response = await self._make_request(
+            method="DELETE",
+            bucket=bucket,
+        )
+
+        result = {}
 
         response.close()
         return result
