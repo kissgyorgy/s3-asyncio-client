@@ -37,7 +37,7 @@ async def client(request):
             endpoint_url="http://localhost:9000",
         )
 
-    bucket_name = "e2e-created-test-bucket"
+    bucket_name = "s3-async-client-e2e-created-test-bucket"
 
     async with s3_client:
         # Create the bucket using our new method (ignore if already exists)
