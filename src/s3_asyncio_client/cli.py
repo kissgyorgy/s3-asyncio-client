@@ -11,41 +11,41 @@ import click
 from .client import S3Client
 
 
-def get_client_from_env(config_file=None):
-    """Create S3Client from environment variables or AWS config file."""
-    if config_file:
-        try:
-            return S3Client.from_aws_config(config_path=config_file)
-        except (FileNotFoundError, ValueError) as e:
-            click.echo(f"Error loading config file: {e}", err=True)
-            sys.exit(1)
-
-    access_key = os.getenv("AWS_ACCESS_KEY_ID")
-    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-    region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-
-    if not access_key or not secret_key:
-        click.echo(
-            "Error: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set", err=True
-        )
-        sys.exit(1)
-
-    return S3Client(
-        access_key=access_key,
-        secret_key=secret_key,
-        region=region,
-        endpoint_url=endpoint_url,
-    )
-
-
 @click.group()
 @click.option("--config-file", help="Path to AWS config file")
 @click.pass_context
 def cli(ctx, config_file):
     """S3 CLI - A command line interface for S3 operations."""
     ctx.ensure_object(dict)
-    ctx.obj["config_file"] = config_file
+
+    # Create S3Client from config file or environment variables
+    if config_file:
+        try:
+            client = S3Client.from_aws_config(config_path=config_file)
+        except (FileNotFoundError, ValueError) as e:
+            click.echo(f"Error loading config file: {e}", err=True)
+            sys.exit(1)
+    else:
+        access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+        endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+
+        if not access_key or not secret_key:
+            click.echo(
+                "Error: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set",
+                err=True,
+            )
+            sys.exit(1)
+
+        client = S3Client(
+            access_key=access_key,
+            secret_key=secret_key,
+            region=region,
+            endpoint_url=endpoint_url,
+        )
+
+    ctx.obj["client"] = client
 
 
 @cli.command()
@@ -59,7 +59,7 @@ def put(ctx, bucket, key, file_path, content_type, metadata):
     """Upload a file to S3."""
 
     async def _put():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         # Read file data
         with open(file_path, "rb") as f:
@@ -100,7 +100,7 @@ def get(ctx, bucket, key, output_path):
     """Download a file from S3."""
 
     async def _get():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             result = await client.get_object(bucket=bucket, key=key)
@@ -131,7 +131,7 @@ def head(ctx, bucket, key):
     """Get object metadata without downloading."""
 
     async def _head():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             result = await client.head_object(bucket=bucket, key=key)
@@ -162,7 +162,7 @@ def list(ctx, bucket, prefix, max_keys):
     """List objects in a bucket."""
 
     async def _list():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             result = await client.list_objects(
@@ -197,7 +197,7 @@ def list(ctx, bucket, prefix, max_keys):
 @click.pass_context
 def presigned_url(ctx, method, bucket, key, expires_in):
     """Generate a presigned URL for S3 operations."""
-    client = get_client_from_env(ctx.obj["config_file"])
+    client = ctx.obj["client"]
 
     url = client.generate_presigned_url(
         method=method.upper(), bucket=bucket, key=key, expires_in=expires_in
@@ -214,7 +214,7 @@ def delete(ctx, bucket, key):
     """Delete an object from S3."""
 
     async def _delete():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             result = await client.delete_object(bucket=bucket, key=key)
@@ -235,7 +235,7 @@ def create_bucket(ctx, bucket):
     """Create a new S3 bucket."""
 
     async def _create_bucket():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             result = await client.create_bucket(bucket=bucket)
@@ -254,7 +254,7 @@ def delete_bucket(ctx, bucket):
     """Delete an S3 bucket."""
 
     async def _delete_bucket():
-        client = get_client_from_env(ctx.obj["config_file"])
+        client = ctx.obj["client"]
 
         async with client:
             await client.delete_bucket(bucket=bucket)
