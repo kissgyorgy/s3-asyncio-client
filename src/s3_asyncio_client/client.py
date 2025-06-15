@@ -74,11 +74,6 @@ class S3Client:
 
         if credentials_path is not None:
             credentials_path = pathlib.Path(credentials_path)
-        else:
-            # Use default credentials path if it exists
-            default_credentials_path = pathlib.Path.home() / ".aws" / "credentials"
-            if default_credentials_path.exists():
-                credentials_path = default_credentials_path
 
         # Read configuration files
         config = configparser.ConfigParser()

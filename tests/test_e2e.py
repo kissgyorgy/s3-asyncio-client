@@ -23,12 +23,7 @@ async def client(request):
     profile_name = request.param
 
     if aws_config_path and profile_name != "minio-default":
-        # Use from_aws_config when config file is provided
-        s3_client = S3Client.from_aws_config(
-            profile_name=profile_name,
-            config_path=aws_config_path,
-            credentials_path=aws_config_path,  # Assume same file contains both
-        )
+        s3_client = S3Client.from_aws_config(profile_name, aws_config_path)
     else:
         # Default minio configuration
         s3_client = S3Client(
