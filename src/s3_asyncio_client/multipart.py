@@ -7,10 +7,10 @@ Uses functions and coroutines instead of complex class hierarchies.
 import asyncio
 import math
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .exceptions import S3ClientError
 

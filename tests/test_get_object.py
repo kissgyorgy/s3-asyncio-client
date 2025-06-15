@@ -1,6 +1,5 @@
 """Unit tests for get_object method."""
 
-import pytest
 
 from s3_asyncio_client import S3Client
 
