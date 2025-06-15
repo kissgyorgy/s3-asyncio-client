@@ -326,6 +326,90 @@ async def test_list_objects(client, test_files):
         assert "last_modified" in obj
 
 
+async def test_upload_file_single_part(client, test_files):
+    """Test upload_file method with single-part upload."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["text"]
+    key = "upload-file/single-part.txt"
+
+    # Use upload_file method for small file (should use single-part)
+    result = await s3_client.upload_file(
+        bucket=bucket,
+        key=key,
+        file_source=file_info["path"],
+        content_type=file_info["content_type"],
+        metadata={"upload_method": "upload_file", "type": "single_part"},
+    )
+
+    # Verify upload result
+    assert result["upload_type"] == "single_part"
+    assert result["size"] == len(file_info["content"])
+    assert "etag" in result
+
+    # Verify the uploaded file
+    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    assert download_result["body"] == file_info["content"]
+    assert download_result["metadata"]["upload_method"] == "upload_file"
+    assert download_result["metadata"]["type"] == "single_part"
+
+
+async def test_upload_file_multipart(client, test_files):
+    """Test upload_file method with multipart upload for large files."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    key = "upload-file/multipart-large.bin"
+
+    # Create a large file (10MB) that will trigger multipart upload
+    large_data = b"A" * (10 * 1024 * 1024)  # 10MB
+
+    from s3_asyncio_client.multipart import TransferConfig
+
+    # Configure for small threshold to force multipart
+    config = TransferConfig(
+        multipart_threshold=5 * 1024 * 1024,  # 5MB threshold
+        multipart_chunksize=5 * 1024 * 1024,  # 5MB chunks
+        max_concurrency=3,
+    )
+
+    # Use upload_file method with file-like object
+    from io import BytesIO
+
+    file_obj = BytesIO(large_data)
+
+    # Track progress
+    progress_calls = []
+
+    def progress_callback(bytes_transferred):
+        progress_calls.append(bytes_transferred)
+
+    result = await s3_client.upload_file(
+        bucket=bucket,
+        key=key,
+        file_source=file_obj,
+        config=config,
+        content_type="application/octet-stream",
+        metadata={"upload_method": "upload_file", "type": "multipart"},
+        progress_callback=progress_callback,
+    )
+
+    # Verify upload result
+    assert result["upload_type"] == "multipart"
+    assert result["size"] == len(large_data)
+    assert result["parts_count"] == 2  # 10MB / 5MB = 2 parts
+    assert "etag" in result
+    assert "location" in result
+
+    # Verify progress callback was called (should be 2 calls for 2 parts)
+    assert len(progress_calls) == 2
+    assert sum(progress_calls) == len(large_data)
+
+    # Verify the uploaded file by downloading it
+    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    assert download_result["body"] == large_data
+    assert download_result["metadata"]["upload_method"] == "upload_file"
+    assert download_result["metadata"]["type"] == "multipart"
+
 
 async def test_delete_object(client, test_files):
     """Test deleting objects."""

@@ -601,3 +601,59 @@ class S3Client:
             expires_in=expires_in,
             query_params=params,
         )
+
+    async def upload_file(
+        self,
+        bucket: str,
+        key: str,
+        file_source,
+        config=None,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+        progress_callback=None,
+        **extra_args,
+    ) -> dict[str, Any]:
+        """Upload a file using automatic single-part or multipart upload.
+
+        Automatically determines whether to use multipart upload based on file size.
+        For large files, uses concurrent multipart upload for better performance.
+
+        Args:
+            bucket: S3 bucket name
+            key: Object key (path)
+            file_source: File path, Path object, or file-like object
+            config: Transfer configuration (multipart.TransferConfig)
+            content_type: MIME type of the object
+            metadata: Custom metadata headers (without x-amz-meta- prefix)
+            progress_callback: Function called with (bytes_transferred) for progress
+            **extra_args: Additional arguments for the request
+
+        Returns:
+            Dictionary with upload result information
+
+        Example:
+            # Upload a small file (single-part)
+            result = await client.upload_file(
+                "my-bucket", "small.txt", "local_file.txt"
+            )
+
+            # Upload a large file (multipart)
+            from s3_asyncio_client.multipart import TransferConfig
+            config = TransferConfig(multipart_threshold=10*1024*1024)  # 10MB
+            result = await client.upload_file(
+                "my-bucket", "large.bin", "big_file.bin", config=config
+            )
+        """
+        from .multipart import upload_file
+
+        return await upload_file(
+            client=self,
+            bucket=bucket,
+            key=key,
+            file_source=file_source,
+            config=config,
+            content_type=content_type,
+            metadata=metadata,
+            progress_callback=progress_callback,
+            **extra_args,
+        )
