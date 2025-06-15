@@ -569,7 +569,8 @@ async def test_presigned_url_download(client, test_files):
 
     # Verify URL structure
     assert presigned_url.startswith("http")
-    assert bucket in presigned_url
+    effective_bucket = s3_client.get_effective_bucket_name(bucket)
+    assert effective_bucket in presigned_url
     assert key in presigned_url
     assert "X-Amz-Algorithm" in presigned_url
     assert "X-Amz-Credential" in presigned_url
@@ -609,7 +610,8 @@ async def test_presigned_url_upload(client, test_files):
 
     # Verify URL structure
     assert presigned_url.startswith("http")
-    assert bucket in presigned_url
+    effective_bucket = s3_client.get_effective_bucket_name(bucket)
+    assert effective_bucket in presigned_url
     assert key in presigned_url
     assert "X-Amz-Algorithm" in presigned_url
     assert "Content-Type" in presigned_url

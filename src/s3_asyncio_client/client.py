@@ -162,23 +162,61 @@ class S3Client:
             await self._session.close()
             self._session = None
 
+    def _get_endpoint_bucket_name(self) -> str | None:
+        """Extract bucket name from endpoint URL if present."""
+        from urllib.parse import urlparse
+
+        parsed_url = urlparse(self.endpoint_url)
+        if parsed_url.hostname:
+            hostname_parts = parsed_url.hostname.split(".")
+            # Check if this looks like a bucket-specific endpoint
+            # (like DigitalOcean Spaces)
+            # Must have at least 3 parts and not be standard S3
+            if len(hostname_parts) >= 3 and not self.endpoint_url.startswith(
+                "https://s3."
+            ):
+                return hostname_parts[0]
+        return None
+
+    def get_effective_bucket_name(self, bucket: str) -> str:
+        """Get the effective bucket name.
+
+        Returns bucket from endpoint if present, otherwise the passed bucket.
+        """
+        endpoint_bucket = self._get_endpoint_bucket_name()
+        return endpoint_bucket if endpoint_bucket else bucket
+
     def _build_url(self, bucket: str, key: str | None = None) -> str:
         """Build S3 URL for bucket and key."""
+        endpoint_bucket = self._get_endpoint_bucket_name()
+
         if key:
             # Virtual hosted-style URL: https://bucket.s3.region.amazonaws.com/key
             if self.endpoint_url.startswith("https://s3."):
                 base_url = self.endpoint_url.replace("s3.", f"{bucket}.s3.")
                 return f"{base_url}/{urllib.parse.quote(key, safe='/')}"
             else:
-                # Path-style URL for custom endpoints
-                quoted_key = urllib.parse.quote(key, safe="/")
-                return f"{self.endpoint_url}/{bucket}/{quoted_key}"
+                # Check if bucket name is already in the endpoint URL
+                # (like DigitalOcean Spaces)
+                if endpoint_bucket:
+                    # Use the bucket from endpoint, ignore the passed bucket parameter
+                    quoted_key = urllib.parse.quote(key, safe="/")
+                    return f"{self.endpoint_url}/{quoted_key}"
+                else:
+                    # Path-style URL for custom endpoints
+                    quoted_key = urllib.parse.quote(key, safe="/")
+                    return f"{self.endpoint_url}/{bucket}/{quoted_key}"
         else:
             # Bucket-only URL
             if self.endpoint_url.startswith("https://s3."):
                 return self.endpoint_url.replace("s3.", f"{bucket}.s3.")
             else:
-                return f"{self.endpoint_url}/{bucket}"
+                # Check if bucket name is already in the endpoint URL
+                if endpoint_bucket:
+                    # Use the bucket from endpoint, ignore the passed bucket parameter
+                    return self.endpoint_url
+                else:
+                    return f"{self.endpoint_url}/{bucket}"
 
     def _parse_error_response(self, status: int, response_text: str) -> Exception:
         """Parse S3 error response and return appropriate exception."""
@@ -508,7 +546,25 @@ class S3Client:
         # Parse XML response
         response_text = await response.text()
         response.close()
-        root = ET.fromstring(response_text)
+
+        # Handle empty response (some S3 services return empty response
+        # for empty buckets)
+        if not response_text.strip():
+            return {
+                "objects": [],
+                "is_truncated": False,
+                "next_continuation_token": None,
+                "prefix": prefix,
+                "max_keys": max_keys,
+            }
+
+        try:
+            root = ET.fromstring(response_text)
+        except ET.ParseError as e:
+            raise ValueError(
+                f"Invalid XML response from S3 service: {e}. "
+                f"Response: {response_text[:200]}..."
+            )
 
         # Extract objects
         objects = []
