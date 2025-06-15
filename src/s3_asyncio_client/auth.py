@@ -9,17 +9,10 @@ import urllib.parse
 class AWSSignatureV4:
     """AWS Signature Version 4 authentication handler."""
 
-    def __init__(
-        self,
-        access_key: str,
-        secret_key: str,
-        region: str = "us-east-1",
-        service: str = "s3",
-    ):
+    def __init__(self, access_key: str, secret_key: str, region: str = "us-east-1"):
         self.access_key = access_key
         self.secret_key = secret_key
         self.region = region
-        self.service = service
 
     def _sha256_hash(self, data: bytes) -> str:
         """Create SHA256 hash of data."""
@@ -33,7 +26,7 @@ class AWSSignatureV4:
         """Derive the signing key for AWS Signature Version 4."""
         k_date = self._hmac_sha256(f"AWS4{self.secret_key}".encode(), date_stamp)
         k_region = self._hmac_sha256(k_date, self.region)
-        k_service = self._hmac_sha256(k_region, self.service)
+        k_service = self._hmac_sha256(k_region, "s3")
         k_signing = self._hmac_sha256(k_service, "aws4_request")
         return k_signing
 
@@ -77,7 +70,7 @@ class AWSSignatureV4:
     ) -> str:
         """Create string to sign for AWS Signature Version 4."""
         algorithm = "AWS4-HMAC-SHA256"
-        credential_scope = f"{date_stamp}/{self.region}/{self.service}/aws4_request"
+        credential_scope = f"{date_stamp}/{self.region}/s3/aws4_request"
         string_to_sign = "\n".join(
             [
                 algorithm,
@@ -161,7 +154,7 @@ class AWSSignatureV4:
         ).hexdigest()
 
         # Create authorization header
-        credential_scope = f"{date_stamp}/{self.region}/{self.service}/aws4_request"
+        credential_scope = f"{date_stamp}/{self.region}/s3/aws4_request"
         authorization_header = (
             f"AWS4-HMAC-SHA256 "
             f"Credential={self.access_key}/{credential_scope}, "
@@ -192,7 +185,7 @@ class AWSSignatureV4:
         date_stamp = now.strftime("%Y%m%d")
 
         # Add AWS query parameters
-        credential_scope = f"{date_stamp}/{self.region}/{self.service}/aws4_request"
+        credential_scope = f"{date_stamp}/{self.region}/s3/aws4_request"
         query_params.update(
             {
                 "X-Amz-Algorithm": "AWS4-HMAC-SHA256",

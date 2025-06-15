@@ -195,11 +195,9 @@ def test_auth_initialization():
     """Test authentication initialization with different parameters."""
     auth1 = AWSSignatureV4("key", "secret")
     assert auth1.region == "us-east-1"  # default
-    assert auth1.service == "s3"  # default
 
-    auth2 = AWSSignatureV4("key", "secret", region="eu-west-1", service="s3")
+    auth2 = AWSSignatureV4("key", "secret", region="eu-west-1")
     assert auth2.region == "eu-west-1"
-    assert auth2.service == "s3"
 
 
 def test_canonical_uri_encoding(auth):
