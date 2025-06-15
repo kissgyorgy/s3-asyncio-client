@@ -49,6 +49,7 @@ dev = [
     "mkdocs-section-index>=0.3.10",
     "mkdocstrings[python]>=0.29.1",
     "moto[s3]>=5.1.5",
+    "pdbpp>=0.11.6",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.11.13",
