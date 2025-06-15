@@ -276,13 +276,7 @@ Handle large files without loading them entirely into memory:
 ```python
 async def stream_upload_large_file(client, bucket, key, file_path, chunk_size=8192):
     """Upload large file in chunks to minimize memory usage."""
-    file_size = os.path.getsize(file_path)
-    
-    # Use multipart upload for large files
-    if file_size > 5 * 1024 * 1024:  # 5MB threshold
-        return await stream_multipart_upload(client, bucket, key, file_path)
-    
-    # For smaller files, stream into memory in chunks
+    # For files, stream into memory in chunks
     chunks = []
     with open(file_path, "rb") as f:
         while True:
@@ -293,32 +287,6 @@ async def stream_upload_large_file(client, bucket, key, file_path, chunk_size=81
     
     data = b''.join(chunks)
     return await client.put_object(bucket, key, data)
-
-async def stream_multipart_upload(client, bucket, key, file_path, part_size=5*1024*1024):
-    """Stream multipart upload to minimize memory usage."""
-    multipart = await client.create_multipart_upload(bucket, key)
-    
-    try:
-        part_number = 1
-        
-        with open(file_path, "rb") as f:
-            while True:
-                # Read one part at a time
-                part_data = f.read(part_size)
-                if not part_data:
-                    break
-                
-                # Upload part immediately
-                await multipart.upload_part(part_number, part_data)
-                part_number += 1
-                
-                # Part data is automatically garbage collected
-        
-        return await multipart.complete()
-        
-    except Exception:
-        await multipart.abort()
-        raise
 
 # Memory-efficient download
 async def stream_download_large_file(client, bucket, key, output_path, chunk_size=8192):
@@ -463,119 +431,6 @@ async with S3Client(access_key, secret_key, region) as client:
     print(f"Completed {len(results)} operations in {duration:.2f}s")
 ```
 
-## Multipart Upload Optimization
-
-### Concurrent Part Uploads
-
-Optimize multipart uploads with concurrent part uploads:
-
-```python
-async def optimized_multipart_upload(
-    client, bucket, key, data, 
-    part_size=8*1024*1024,      # 8MB parts for better performance
-    max_concurrent_parts=5       # Limit concurrent uploads
-):
-    """Optimized multipart upload with concurrent parts."""
-    if len(data) <= part_size:
-        return await client.put_object(bucket, key, data)
-    
-    multipart = await client.create_multipart_upload(bucket, key)
-    semaphore = asyncio.Semaphore(max_concurrent_parts)
-    
-    async def upload_part_with_limit(part_number, part_data):
-        async with semaphore:
-            return await multipart.upload_part(part_number, part_data)
-    
-    try:
-        # Create part upload tasks
-        tasks = []
-        part_number = 1
-        offset = 0
-        
-        while offset < len(data):
-            end_offset = min(offset + part_size, len(data))
-            part_data = data[offset:end_offset]
-            
-            task = upload_part_with_limit(part_number, part_data)
-            tasks.append(task)
-            
-            offset = end_offset
-            part_number += 1
-        
-        # Execute parts concurrently
-        part_results = await asyncio.gather(*tasks)
-        
-        # Complete upload
-        return await multipart.complete()
-        
-    except Exception:
-        await multipart.abort()
-        raise
-
-# Usage
-large_data = b"x" * (50 * 1024 * 1024)  # 50MB test data
-
-async with S3Client(access_key, secret_key, region) as client:
-    result = await optimized_multipart_upload(
-        client, "bucket", "large-optimized.bin", large_data
-    )
-    print(f"Upload completed: {result['etag']}")
-```
-
-### Dynamic Part Sizing
-
-Adjust part sizes based on file size for optimal performance:
-
-```python
-def calculate_optimal_part_size(file_size):
-    """Calculate optimal part size based on file size."""
-    min_part_size = 5 * 1024 * 1024    # 5MB minimum
-    max_part_size = 100 * 1024 * 1024  # 100MB maximum
-    max_parts = 10000                  # S3 limit
-    
-    # Calculate part size to stay under part limit
-    calculated_size = file_size // max_parts
-    
-    # Ensure part size is within valid range
-    part_size = max(min_part_size, min(calculated_size, max_part_size))
-    
-    # Round to nearest MB for consistency
-    part_size = ((part_size + 1024*1024 - 1) // (1024*1024)) * 1024*1024
-    
-    return part_size
-
-async def adaptive_multipart_upload(client, bucket, key, file_path):
-    """Multipart upload with adaptive part sizing."""
-    file_size = os.path.getsize(file_path)
-    part_size = calculate_optimal_part_size(file_size)
-    
-    print(f"File size: {file_size // (1024*1024)}MB, Part size: {part_size // (1024*1024)}MB")
-    
-    multipart = await client.create_multipart_upload(bucket, key)
-    
-    try:
-        part_number = 1
-        
-        with open(file_path, "rb") as f:
-            while True:
-                part_data = f.read(part_size)
-                if not part_data:
-                    break
-                
-                await multipart.upload_part(part_number, part_data)
-                print(f"Uploaded part {part_number}")
-                part_number += 1
-        
-        return await multipart.complete()
-        
-    except Exception:
-        await multipart.abort()
-        raise
-
-# Usage
-async with S3Client(access_key, secret_key, region) as client:
-    result = await adaptive_multipart_upload(client, "bucket", "adaptive-upload.bin", "/path/to/large-file")
-```
 
 ## Caching Strategies
 
@@ -893,17 +748,11 @@ async with S3Client(access_key, secret_key, region) as client:
 
 ### 3. Memory Efficiency
 - Stream large files instead of loading into memory
-- Use multipart uploads for files >5MB
+- Stream large files in chunks to avoid memory issues
 - Implement memory pooling for repeated operations
 - Consider manual garbage collection for high throughput
 
-### 4. Multipart Optimization
-- Use appropriate part sizes (8-100MB)
-- Upload parts concurrently with limits
-- Calculate optimal part sizes based on file size
-- Implement resume capability for large uploads
-
-### 5. Caching
+### 4. Caching
 - Cache metadata for frequently accessed objects
 - Use appropriate TTLs for cache entries
 - Implement LRU eviction for memory management

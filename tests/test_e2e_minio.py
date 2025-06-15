@@ -326,43 +326,6 @@ async def test_list_objects(client, test_files):
         assert "last_modified" in obj
 
 
-async def test_multipart_upload(client, test_files):
-    """Test multipart upload with a large file."""
-    s3_client = client["client"]
-    bucket = client["bucket"]
-    file_info = test_files["large"]
-    key = "large-files/big-file.bin"
-
-    # Create multipart upload
-    multipart = await s3_client.create_multipart_upload(
-        bucket=bucket,
-        key=key,
-        content_type=file_info["content_type"],
-        metadata={"size": "large", "test": "multipart"},
-    )
-
-    # Upload parts (split into 5MB+ chunks - minimum for S3)
-    chunk_size = 5 * 1024 * 1024  # 5MB minimum for multipart parts
-    content = file_info["content"]
-
-    part_number = 1
-    for i in range(0, len(content), chunk_size):
-        chunk = content[i : i + chunk_size]
-        await multipart.upload_part(part_number, chunk)
-        part_number += 1
-
-    # Complete multipart upload
-    completion_result = await multipart.complete()
-
-    assert "etag" in completion_result
-    assert "location" in completion_result
-
-    # Verify the uploaded file
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
-    assert download_result["body"] == file_info["content"]
-    assert download_result["metadata"]["size"] == "large"
-    assert download_result["metadata"]["test"] == "multipart"
-
 
 async def test_delete_object(client, test_files):
     """Test deleting objects."""
