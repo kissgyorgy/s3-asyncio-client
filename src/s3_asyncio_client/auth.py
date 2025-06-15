@@ -206,7 +206,8 @@ class AWSSignatureV4:
         # Create query string for signing
         query_string = "&".join(
             [
-                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                f"{urllib.parse.quote(k, safe='')}="
+                f"{urllib.parse.quote(str(v), safe='')}"
                 for k, v in sorted(query_params.items())
             ]
         )
@@ -243,7 +244,8 @@ class AWSSignatureV4:
         # Build final URL
         final_query_string = "&".join(
             [
-                f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}"
+                f"{urllib.parse.quote(k, safe='')}="
+                f"{urllib.parse.quote(str(v), safe='')}"
                 for k, v in sorted(query_params.items())
             ]
         )

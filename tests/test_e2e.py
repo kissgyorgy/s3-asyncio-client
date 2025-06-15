@@ -10,6 +10,7 @@ metadata handling, and error scenarios.
 import tempfile
 from pathlib import Path
 
+import aiohttp
 import pytest
 
 from s3_asyncio_client import S3Client
@@ -412,7 +413,7 @@ async def test_upload_file_multipart(client, test_files):
     download_result = await s3_client.get_object(bucket=bucket, key=key)
     assert download_result["body"] == large_data
 
-    # Note: Some S3 services (like OVH) may not preserve metadata during multipart uploads
+    # Note: Some S3 services may not preserve metadata during multipart uploads
     # So we only check metadata if it exists
     if "upload_method" in download_result["metadata"]:
         assert download_result["metadata"]["upload_method"] == "upload_file"
@@ -545,3 +546,254 @@ async def test_error_handling(client):
     # Test delete non-existent object (should succeed - idempotent)
     result = await s3_client.delete_object(bucket=bucket, key="does-not-exist.txt")
     assert isinstance(result, dict)
+
+
+async def test_presigned_url_download(client, test_files):
+    """Test downloading objects using presigned URLs."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["text"]
+    key = "presigned-test/download-test.txt"
+
+    # Upload file first
+    await s3_client.put_object(
+        bucket=bucket,
+        key=key,
+        data=file_info["content"],
+        content_type=file_info["content_type"],
+        metadata={"test": "presigned_download"},
+    )
+
+    # Generate presigned URL for download (GET)
+    presigned_url = s3_client.generate_presigned_url(
+        method="GET",
+        bucket=bucket,
+        key=key,
+        expires_in=3600,  # 1 hour
+    )
+
+    # Verify URL structure
+    assert presigned_url.startswith("http")
+    assert bucket in presigned_url
+    assert key in presigned_url
+    assert "X-Amz-Algorithm" in presigned_url
+    assert "X-Amz-Credential" in presigned_url
+    assert "X-Amz-Date" in presigned_url
+    assert "X-Amz-Expires" in presigned_url
+    assert "X-Amz-SignedHeaders" in presigned_url
+    assert "X-Amz-Signature" in presigned_url
+
+    # Use presigned URL to download the file
+    async with aiohttp.ClientSession() as session:
+        async with session.get(presigned_url) as response:
+            assert response.status == 200
+            assert response.headers["Content-Type"] == file_info["content_type"]
+
+            downloaded_content = await response.read()
+            assert downloaded_content == file_info["content"]
+
+            # Check metadata headers (prefixed with x-amz-meta-)
+            assert response.headers.get("x-amz-meta-test") == "presigned_download"
+
+
+async def test_presigned_url_upload(client, test_files):
+    """Test uploading objects using presigned URLs."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["json"]
+    key = "presigned-test/upload-test.json"
+
+    # Generate presigned URL for upload (PUT)
+    presigned_url = s3_client.generate_presigned_url(
+        method="PUT",
+        bucket=bucket,
+        key=key,
+        expires_in=3600,  # 1 hour
+        params={"Content-Type": file_info["content_type"]},
+    )
+
+    # Verify URL structure
+    assert presigned_url.startswith("http")
+    assert bucket in presigned_url
+    assert key in presigned_url
+    assert "X-Amz-Algorithm" in presigned_url
+    assert "Content-Type" in presigned_url
+
+    # Use presigned URL to upload the file
+    async with aiohttp.ClientSession() as session:
+        async with session.put(
+            presigned_url,
+            data=file_info["content"],
+            headers={"Content-Type": file_info["content_type"]},
+        ) as response:
+            assert response.status == 200
+
+    # Verify the upload by downloading the file normally
+    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    assert download_result["body"] == file_info["content"]
+    assert download_result["content_type"] == file_info["content_type"]
+
+
+async def test_presigned_url_with_custom_params(client, test_files):
+    """Test presigned URLs with custom query parameters."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["binary"]
+    key = "presigned-test/custom-params.dat"
+
+    # Upload file first
+    await s3_client.put_object(
+        bucket=bucket,
+        key=key,
+        data=file_info["content"],
+        content_type=file_info["content_type"],
+    )
+
+    # Generate presigned URL with custom response headers
+    presigned_url = s3_client.generate_presigned_url(
+        method="GET",
+        bucket=bucket,
+        key=key,
+        expires_in=1800,  # 30 minutes
+        params={
+            "response-content-disposition": "attachment; filename=custom-filename.dat",
+            "response-content-type": "application/force-download",
+        },
+    )
+
+    # Verify custom parameters are in URL
+    assert "response-content-disposition" in presigned_url
+    assert "response-content-type" in presigned_url
+    assert "custom-filename.dat" in presigned_url
+
+    # Use presigned URL and verify custom response headers
+    async with aiohttp.ClientSession() as session:
+        async with session.get(presigned_url) as response:
+            assert response.status == 200
+
+            # Verify custom response headers from query parameters
+            assert (
+                response.headers["Content-Disposition"]
+                == "attachment; filename=custom-filename.dat"
+            )
+            assert response.headers["Content-Type"] == "application/force-download"
+
+            downloaded_content = await response.read()
+            assert downloaded_content == file_info["content"]
+
+
+async def test_presigned_url_expiration(client, test_files):
+    """Test presigned URL expiration behavior."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["text"]
+    key = "presigned-test/expiration-test.txt"
+
+    # Upload file first
+    await s3_client.put_object(
+        bucket=bucket,
+        key=key,
+        data=file_info["content"],
+        content_type=file_info["content_type"],
+    )
+
+    # Generate presigned URL with very short expiration (1 second)
+    presigned_url = s3_client.generate_presigned_url(
+        method="GET",
+        bucket=bucket,
+        key=key,
+        expires_in=1,  # 1 second
+    )
+
+    # Wait for URL to expire
+    import asyncio
+
+    await asyncio.sleep(2)
+
+    # Try to use expired URL
+    async with aiohttp.ClientSession() as session:
+        async with session.get(presigned_url) as response:
+            # Should receive 403 Forbidden or 401 Unauthorized for expired URL
+            # Different S3-compatible services return different status codes
+            assert response.status in [401, 403]
+
+
+async def test_presigned_url_multipart_upload(client, test_files):
+    """Test presigned URLs work with files that could trigger multipart uploads."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["large"]  # 5MB file
+    key = "presigned-test/large-upload.bin"
+
+    # Generate presigned URL for large file upload
+    presigned_url = s3_client.generate_presigned_url(
+        method="PUT",
+        bucket=bucket,
+        key=key,
+        expires_in=3600,
+        params={"Content-Type": file_info["content_type"]},
+    )
+
+    # Upload large file using presigned URL (single PUT request)
+    async with aiohttp.ClientSession() as session:
+        async with session.put(
+            presigned_url,
+            data=file_info["content"],
+            headers={"Content-Type": file_info["content_type"]},
+        ) as response:
+            assert response.status == 200
+
+    # Verify upload by checking file size and downloading a portion
+    head_result = await s3_client.head_object(bucket=bucket, key=key)
+    assert head_result["content_length"] == len(file_info["content"])
+
+    # Download and verify first 1KB to confirm integrity
+    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    assert len(download_result["body"]) == len(file_info["content"])
+    assert download_result["body"][:1024] == file_info["content"][:1024]
+
+
+async def test_presigned_url_binary_content(client, test_files):
+    """Test presigned URLs handle binary content correctly."""
+    s3_client = client["client"]
+    bucket = client["bucket"]
+    file_info = test_files["binary"]
+    key = "presigned-test/binary-content.dat"
+
+    # Upload binary file using presigned URL
+    presigned_upload_url = s3_client.generate_presigned_url(
+        method="PUT",
+        bucket=bucket,
+        key=key,
+        expires_in=3600,
+        params={"Content-Type": file_info["content_type"]},
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.put(
+            presigned_upload_url,
+            data=file_info["content"],
+            headers={"Content-Type": file_info["content_type"]},
+        ) as response:
+            assert response.status == 200
+
+    # Download using presigned URL
+    presigned_download_url = s3_client.generate_presigned_url(
+        method="GET",
+        bucket=bucket,
+        key=key,
+        expires_in=3600,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(presigned_download_url) as response:
+            assert response.status == 200
+            downloaded_content = await response.read()
+
+            # Verify binary content integrity
+            assert downloaded_content == file_info["content"]
+            assert len(downloaded_content) == 1024
+
+            # Verify binary pattern (bytes 0-255 repeated)
+            for i in range(256):
+                assert downloaded_content[i] == (i % 256)
