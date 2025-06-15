@@ -168,5 +168,5 @@ if __name__ == "__main__":
 
 - Learn about [Configuration](configuration.md) options
 - Explore [Basic Operations](../guide/basic-operations.md) in detail
-- Check out [Advanced Usage](../guide/advanced-usage.md) for multipart uploads and more
+- Check out [Advanced Usage](../guide/advanced-usage.md) for advanced operations
 - Browse [Examples](../examples/basic.md) for common use cases

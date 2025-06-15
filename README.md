@@ -13,7 +13,6 @@ A minimal, fast, and simple asyncio-based Amazon S3 client library for Python.
 - 📦 **Minimal Dependencies**: Only requires `aiohttp` for HTTP operations
 - 🔗 **S3 Compatible**: Works with Amazon S3 and S3-compatible services (MinIO, DigitalOcean Spaces, etc.)
 - 🔐 **Full Authentication**: Complete AWS Signature Version 4 implementation
-- 📤 **Multipart Upload**: Support for uploading large files in chunks
 - 🔗 **Pre-signed URLs**: Generate time-limited URLs for secure access
 - 🎯 **Type Safe**: Full type hints throughout the codebase
 - ⚡ **High Performance**: Optimized for speed and memory efficiency
@@ -27,7 +26,6 @@ A minimal, fast, and simple asyncio-based Amazon S3 client library for Python.
 | `head_object` | Get object metadata without downloading content |
 | `list_objects` | List objects in a bucket with optional filtering |
 | `generate_presigned_url` | Create secure, time-limited URLs |
-| **Multipart Upload** | Upload large files efficiently in chunks |
 
 ## Installation
 

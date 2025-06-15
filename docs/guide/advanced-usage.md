@@ -2,234 +2,6 @@
 
 This guide covers advanced features and patterns for using the S3 Asyncio Client effectively.
 
-## Multipart Uploads
-
-For large files (>5MB), multipart uploads provide better performance, reliability, and the ability to resume interrupted uploads.
-
-### Automatic Multipart Upload
-
-The simplest way to handle large files is using `upload_file_multipart()`, which automatically manages the multipart process:
-
-```python
-async with S3Client(access_key, secret_key, region) as client:
-    # Read large file
-    with open("/path/to/large-file.bin", "rb") as f:
-        large_data = f.read()  # e.g., 100MB file
-    
-    # Upload with custom part size (default: 5MB)
-    result = await client.upload_file_multipart(
-        bucket="my-bucket",
-        key="large-file.bin",
-        data=large_data,
-        part_size=10 * 1024 * 1024,  # 10MB parts
-        content_type="application/octet-stream",
-        metadata={"source": "backup", "compressed": "true"}
-    )
-    
-    print(f"Upload completed: {result['etag']}")
-    print(f"Parts uploaded: {result['parts_count']}")
-```
-
-### Manual Multipart Upload Control
-
-For fine-grained control, you can manually manage the multipart upload process:
-
-```python
-async with S3Client(access_key, secret_key, region) as client:
-    # Step 1: Initiate multipart upload
-    multipart = await client.create_multipart_upload(
-        bucket="my-bucket",
-        key="manual-upload.bin",
-        content_type="application/octet-stream",
-        metadata={"upload_method": "manual"}
-    )
-    
-    try:
-        # Step 2: Upload parts
-        part_size = 5 * 1024 * 1024  # 5MB
-        part_number = 1
-        
-        with open("/path/to/large-file.bin", "rb") as f:
-            while True:
-                # Read next chunk
-                chunk = f.read(part_size)
-                if not chunk:
-                    break
-                
-                # Upload part
-                part_info = await multipart.upload_part(part_number, chunk)
-                print(f"Uploaded part {part_number}: {part_info['etag']}")
-                
-                part_number += 1
-        
-        # Step 3: Complete upload
-        result = await multipart.complete()
-        print(f"Upload completed: {result['location']}")
-        
-    except Exception as e:
-        # Step 4: Abort on error
-        await multipart.abort()
-        print(f"Upload aborted due to error: {e}")
-        raise
-```
-
-### Concurrent Part Uploads
-
-Upload multiple parts concurrently for better performance:
-
-```python
-import asyncio
-
-async def upload_part_with_retry(multipart, part_number, data, max_retries=3):
-    """Upload a part with retry logic."""
-    for attempt in range(max_retries):
-        try:
-            return await multipart.upload_part(part_number, data)
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            print(f"Part {part_number} attempt {attempt + 1} failed: {e}")
-            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-
-async def upload_large_file_concurrent(client, bucket, key, file_path, part_size=5*1024*1024, max_concurrency=5):
-    """Upload large file with concurrent parts."""
-    # Initiate multipart upload
-    multipart = await client.create_multipart_upload(bucket, key)
-    
-    try:
-        # Read and split file into parts
-        parts_data = []
-        with open(file_path, "rb") as f:
-            part_number = 1
-            while True:
-                chunk = f.read(part_size)
-                if not chunk:
-                    break
-                parts_data.append((part_number, chunk))
-                part_number += 1
-        
-        # Upload parts with limited concurrency
-        semaphore = asyncio.Semaphore(max_concurrency)
-        
-        async def upload_part_limited(part_number, data):
-            async with semaphore:
-                return await upload_part_with_retry(multipart, part_number, data)
-        
-        # Execute uploads concurrently
-        tasks = [upload_part_limited(part_num, data) for part_num, data in parts_data]
-        results = await asyncio.gather(*tasks)
-        
-        # Complete upload
-        final_result = await multipart.complete()
-        return final_result
-        
-    except Exception:
-        await multipart.abort()
-        raise
-
-# Usage
-async with S3Client(access_key, secret_key, region) as client:
-    result = await upload_large_file_concurrent(
-        client, "my-bucket", "huge-file.bin", "/path/to/huge-file.bin"
-    )
-```
-
-### Resumable Uploads
-
-Track upload progress and resume from where you left off:
-
-```python
-import json
-import os
-
-class ResumableUpload:
-    def __init__(self, client, bucket, key, file_path, state_file="upload_state.json"):
-        self.client = client
-        self.bucket = bucket
-        self.key = key
-        self.file_path = file_path
-        self.state_file = state_file
-        self.multipart = None
-        self.completed_parts = {}
-    
-    def save_state(self):
-        """Save upload state to file."""
-        state = {
-            "bucket": self.bucket,
-            "key": self.key,
-            "file_path": self.file_path,
-            "upload_id": self.multipart.upload_id if self.multipart else None,
-            "completed_parts": self.completed_parts
-        }
-        with open(self.state_file, "w") as f:
-            json.dump(state, f)
-    
-    def load_state(self):
-        """Load upload state from file."""
-        if os.path.exists(self.state_file):
-            with open(self.state_file, "r") as f:
-                state = json.load(f)
-            self.completed_parts = state.get("completed_parts", {})
-            return state.get("upload_id")
-        return None
-    
-    async def upload(self, part_size=5*1024*1024):
-        """Upload file with resume capability."""
-        # Try to resume existing upload
-        upload_id = self.load_state()
-        
-        if upload_id:
-            # Resume existing upload
-            from s3_asyncio_client.multipart import MultipartUpload
-            self.multipart = MultipartUpload(self.client, self.bucket, self.key, upload_id)
-            print(f"Resuming upload with {len(self.completed_parts)} completed parts")
-        else:
-            # Start new upload
-            self.multipart = await self.client.create_multipart_upload(self.bucket, self.key)
-            print("Starting new multipart upload")
-        
-        try:
-            file_size = os.path.getsize(self.file_path)
-            total_parts = (file_size + part_size - 1) // part_size
-            
-            with open(self.file_path, "rb") as f:
-                for part_number in range(1, total_parts + 1):
-                    # Skip already completed parts
-                    if str(part_number) in self.completed_parts:
-                        f.seek(part_number * part_size)
-                        continue
-                    
-                    # Read part data
-                    f.seek((part_number - 1) * part_size)
-                    data = f.read(part_size)
-                    
-                    # Upload part
-                    part_info = await self.multipart.upload_part(part_number, data)
-                    self.completed_parts[str(part_number)] = part_info
-                    
-                    # Save progress
-                    self.save_state()
-                    print(f"Completed part {part_number}/{total_parts}")
-            
-            # Complete upload
-            result = await self.multipart.complete()
-            
-            # Clean up state file
-            if os.path.exists(self.state_file):
-                os.remove(self.state_file)
-            
-            return result
-            
-        except Exception:
-            self.save_state()  # Save current progress
-            raise
-
-# Usage
-async with S3Client(access_key, secret_key, region) as client:
-    uploader = ResumableUpload(client, "my-bucket", "resumable-file.bin", "/path/to/file.bin")
-    result = await uploader.upload()
-```
-
 ## Advanced S3 Operations
 
 ### Custom Headers and Parameters
@@ -508,49 +280,6 @@ upload_url = generate_presigned_upload_url(
 # Client must include Content-Type header when uploading
 ```
 
-### Presigned URLs for Multipart Uploads
-
-```python
-async def create_presigned_multipart_urls(client, bucket, key, parts_count, expires_in=3600):
-    """Create presigned URLs for multipart upload."""
-    # Initiate multipart upload
-    multipart = await client.create_multipart_upload(bucket, key)
-    
-    # Generate presigned URLs for each part
-    part_urls = {}
-    for part_number in range(1, parts_count + 1):
-        # Build URL for this part
-        url = client._build_url(bucket, key)
-        params = {
-            "partNumber": str(part_number),
-            "uploadId": multipart.upload_id
-        }
-        
-        part_url = client._auth.create_presigned_url(
-            method="PUT",
-            url=url,
-            expires_in=expires_in,
-            query_params=params
-        )
-        part_urls[part_number] = part_url
-    
-    return {
-        "upload_id": multipart.upload_id,
-        "part_urls": part_urls,
-        "multipart": multipart
-    }
-
-# Usage
-async with S3Client(access_key, secret_key, region) as client:
-    # Create presigned URLs for 5 parts
-    result = await create_presigned_multipart_urls(
-        client, "my-bucket", "large-file.bin", parts_count=5
-    )
-    
-    # Clients can now upload directly to these URLs
-    for part_num, url in result["part_urls"].items():
-        print(f"Part {part_num}: {url}")
-```
 
 ## Connection Management
 
@@ -650,29 +379,6 @@ async def upload_from_stream(client, bucket, key, stream, chunk_size=8192):
     data = b''.join(chunks)
     return await client.put_object(bucket, key, data)
 
-# For very large streams, use multipart upload
-async def upload_large_stream(client, bucket, key, stream, part_size=5*1024*1024):
-    """Upload large stream using multipart."""
-    multipart = await client.create_multipart_upload(bucket, key)
-    
-    try:
-        part_number = 1
-        
-        while True:
-            # Read one part's worth of data
-            part_data = await stream.read(part_size)
-            if not part_data:
-                break
-                
-            # Upload part
-            await multipart.upload_part(part_number, part_data)
-            part_number += 1
-        
-        return await multipart.complete()
-        
-    except Exception:
-        await multipart.abort()
-        raise
 ```
 
 ## Best Practices
@@ -692,18 +398,7 @@ finally:
     await client.close()
 ```
 
-### 2. Use Multipart for Large Files
-
-```python
-# Files larger than 5MB should use multipart
-file_size = os.path.getsize(file_path)
-if file_size > 5 * 1024 * 1024:
-    result = await client.upload_file_multipart(bucket, key, data)
-else:
-    result = await client.put_object(bucket, key, data)
-```
-
-### 3. Handle Errors Appropriately
+### 2. Handle Errors Appropriately
 
 ```python
 from s3_asyncio_client.exceptions import S3Error, S3NotFoundError
@@ -721,7 +416,7 @@ except Exception as e:
     print(f"Unexpected error: {e}")
 ```
 
-### 4. Implement Retry Logic
+### 3. Implement Retry Logic
 
 ```python
 import asyncio

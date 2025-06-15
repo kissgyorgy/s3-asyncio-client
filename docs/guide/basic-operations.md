@@ -383,7 +383,7 @@ async with S3Client(access_key, secret_key, region) as client:
 
 ## Next Steps
 
-- Learn about [Advanced Usage](advanced-usage.md) for multipart uploads
+- Learn about [Advanced Usage](advanced-usage.md) for advanced S3 operations
 - Check [Error Handling](error-handling.md) for comprehensive error management
 - See [Performance Tips](performance.md) for optimization strategies
 - Browse [Examples](../examples/basic.md) for real-world use cases

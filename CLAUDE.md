@@ -39,7 +39,6 @@ minio server /tmp/minio-data --console-address :9001
 - **S3Client** (`client.py`): Main async client with context manager pattern, single aiohttp session
 - **AWSSignatureV4** (`auth.py`): Complete AWS Signature V4 implementation for authentication
 - **Exception Hierarchy** (`exceptions.py`): Structured S3Error -> S3ClientError/S3ServerError
-- **MultipartUpload** (`multipart.py`): Handles large file uploads with automatic part management
 
 ### Key Design Patterns
 - **Async Context Manager**: All operations through `async with S3Client(...) as client:`
@@ -82,11 +81,6 @@ async def test_with_moto():
 - **S3-Compatible**: Path-style (`https://endpoint.com/bucket/key`)
 - Automatic URL encoding for special characters
 
-### Multipart Upload Flow
-1. `create_multipart_upload()` - Initiate with upload ID
-2. `upload_part()` - Upload parts (1-10000) with ETag tracking
-3. `complete()` - Finalize with XML manifest of part ETags
-4. Auto-abort on errors for cleanup
 
 ### Response Handling
 - Extract metadata from `x-amz-meta-*` headers
@@ -113,5 +107,4 @@ async def test_with_moto():
 
 ### Performance Patterns
 - Single aiohttp session for connection pooling
-- Multipart upload for files >5MB
 - Async context managers for proper resource cleanup
