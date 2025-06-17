@@ -1,14 +1,9 @@
-"""Unit tests for put_object method."""
-
-
 from s3_asyncio_client import S3Client
 
 
 async def test_put_object_headers(monkeypatch):
-    """Test that put_object sets correct headers."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the _make_request method
     class MockResponse:
         headers = {
             "ETag": '"abcd1234"',
@@ -20,7 +15,6 @@ async def test_put_object_headers(monkeypatch):
 
     mock_response = MockResponse()
 
-    # Track calls to _make_request
     calls = []
 
     async def mock_make_request(**kwargs):
@@ -40,7 +34,6 @@ async def test_put_object_headers(monkeypatch):
         metadata=metadata,
     )
 
-    # Check that _make_request was called with correct parameters
     assert len(calls) == 1
     call_args = calls[0]
 
@@ -55,13 +48,11 @@ async def test_put_object_headers(monkeypatch):
     assert headers["x-amz-meta-author"] == "test"
     assert headers["x-amz-meta-purpose"] == "testing"
 
-    # Check result
     assert result["etag"] == "abcd1234"
     assert result["version_id"] == "version123"
 
 
 async def test_put_object_minimal(monkeypatch):
-    """Test put_object with minimal parameters."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     class MockResponse:
@@ -72,7 +63,6 @@ async def test_put_object_minimal(monkeypatch):
 
     mock_response = MockResponse()
 
-    # Track calls to _make_request
     calls = []
 
     async def mock_make_request(**kwargs):
@@ -84,15 +74,13 @@ async def test_put_object_minimal(monkeypatch):
     data = b"minimal data"
     result = await client.put_object("bucket", "key", data)
 
-    # Check that minimal headers are set
     assert len(calls) == 1
     call_args = calls[0]
     headers = call_args["headers"]
 
     assert "Content-Length" in headers
     assert headers["Content-Length"] == str(len(data))
-    assert "Content-Type" not in headers  # Should not be set when not provided
+    assert "Content-Type" not in headers
 
-    # Check result
     assert result["etag"] == "minimal"
-    assert result["version_id"] is None  # Not in response
+    assert result["version_id"] is None

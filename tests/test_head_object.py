@@ -1,14 +1,9 @@
-"""Unit tests for head_object method."""
-
-
 from s3_asyncio_client import S3Client
 
 
 async def test_head_object_basic(monkeypatch):
-    """Test basic head_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the response
     class MockResponse:
         headers = {
             "Content-Type": "text/plain",
@@ -22,7 +17,6 @@ async def test_head_object_basic(monkeypatch):
 
     mock_response = MockResponse()
 
-    # Track calls to _make_request
     calls = []
 
     async def mock_make_request(**kwargs):
@@ -36,7 +30,6 @@ async def test_head_object_basic(monkeypatch):
         key="test-key",
     )
 
-    # Check that _make_request was called correctly
     assert len(calls) == 1
     assert calls[0] == {
         "method": "HEAD",
@@ -44,7 +37,6 @@ async def test_head_object_basic(monkeypatch):
         "key": "test-key",
     }
 
-    # Check result (should be like get_object but without body)
     assert result["content_type"] == "text/plain"
     assert result["content_length"] == 13
     assert result["etag"] == "abc123"
@@ -56,10 +48,8 @@ async def test_head_object_basic(monkeypatch):
 
 
 async def test_head_object_with_metadata(monkeypatch):
-    """Test head_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the response with metadata headers
     class MockResponse:
         headers = {
             "Content-Type": "application/json",
@@ -83,7 +73,6 @@ async def test_head_object_with_metadata(monkeypatch):
 
     result = await client.head_object("test-bucket", "test-key")
 
-    # Check metadata extraction
     assert result["metadata"]["author"] == "test-user"
     assert result["metadata"]["purpose"] == "testing"
     assert result["version_id"] == "version123"

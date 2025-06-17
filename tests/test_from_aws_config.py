@@ -1,5 +1,3 @@
-"""Tests for S3Client.from_aws_config classmethod."""
-
 import os
 import pathlib
 import tempfile
@@ -10,11 +8,7 @@ from s3_asyncio_client.client import S3Client
 
 
 class TestFromAWSConfig:
-    """Test S3Client.from_aws_config method."""
-
     def test_basic_config_default_profile(self, tmp_path: pathlib.Path):
-        """Test basic config with default profile."""
-        # Create credentials file
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[default]
 aws_access_key_id = AKIAIOSFODNN7EXAMPLE
@@ -22,7 +16,6 @@ aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 region = us-west-2
 """)
 
-        # Create config file
         config_file = tmp_path / "config"
         config_file.write_text("""[default]
 region = us-east-1
@@ -35,12 +28,10 @@ output = json
 
         assert client.access_key == "AKIAIOSFODNN7EXAMPLE"
         assert client.secret_key == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-        assert client.region == "us-west-2"  # credentials takes precedence
+        assert client.region == "us-west-2"
         assert client.endpoint_url == "https://s3.us-west-2.amazonaws.com"
 
     def test_named_profile(self, tmp_path: pathlib.Path):
-        """Test config with named profile."""
-        # Create credentials file
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[default]
 aws_access_key_id = DEFAULTKEY
@@ -53,7 +44,6 @@ aws_secret_access_key = DEVSECRET
 region = us-west-1
 """)
 
-        # Create config file
         config_file = tmp_path / "config"
         config_file.write_text("""[default]
 region = us-east-1
@@ -71,11 +61,10 @@ output = table
 
         assert client.access_key == "DEVKEY"
         assert client.secret_key == "DEVSECRET"
-        assert client.region == "us-west-1"  # credentials takes precedence
+        assert client.region == "us-west-1"
         assert client.endpoint_url == "https://s3.us-west-1.amazonaws.com"
 
     def test_custom_endpoint_url_in_credentials(self, tmp_path: pathlib.Path):
-        """Test custom endpoint URL in credentials file."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[minio]
 aws_access_key_id = minioadmin
@@ -94,7 +83,6 @@ endpoint_url = http://localhost:9000
         assert client.endpoint_url == "http://localhost:9000"
 
     def test_custom_endpoint_url_in_config(self, tmp_path: pathlib.Path):
-        """Test custom endpoint URL in config file."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[minio]
 aws_access_key_id = minioadmin
@@ -120,7 +108,6 @@ output = json
         assert client.endpoint_url == "http://localhost:9000"
 
     def test_s3_section_in_config(self, tmp_path: pathlib.Path):
-        """Test s3 section in config file."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[custom]
 aws_access_key_id = CUSTOMKEY
@@ -144,12 +131,9 @@ endpoint_url = http://localhost:9000
         assert client.access_key == "CUSTOMKEY"
         assert client.secret_key == "CUSTOMSECRET"
         assert client.region == "us-east-1"
-        # For now, simple s3 section handling is not implemented
         assert client.endpoint_url == "https://s3.us-east-1.amazonaws.com"
 
     def test_region_precedence(self, tmp_path: pathlib.Path):
-        """Test region precedence: credentials > config > env > default."""
-        # Set environment variable
         os.environ["AWS_DEFAULT_REGION"] = "ap-south-1"
 
         try:
@@ -185,12 +169,10 @@ output = json
             assert client.region == "ap-south-1"
 
         finally:
-            # Clean up environment
             if "AWS_DEFAULT_REGION" in os.environ:
                 del os.environ["AWS_DEFAULT_REGION"]
 
     def test_endpoint_url_precedence(self, tmp_path: pathlib.Path):
-        """Test endpoint_url precedence: credentials > config."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[test]
 aws_access_key_id = TESTKEY
@@ -214,7 +196,6 @@ endpoint_url = http://config.example.com
         assert client.endpoint_url == "http://creds.example.com"
 
     def test_whitespace_handling(self, tmp_path: pathlib.Path):
-        """Test various whitespace scenarios."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[whitespace]
 aws_access_key_id   =   WHITESPACEKEY
@@ -241,7 +222,6 @@ output = json
         assert client.endpoint_url == "http://localhost:9000"
 
     def test_missing_credentials_file(self, tmp_path: pathlib.Path):
-        """Test missing credentials file works if config has credentials."""
         config_file = tmp_path / "config"
         config_file.write_text("""[default]
 aws_access_key_id = TESTKEY
@@ -249,7 +229,6 @@ aws_secret_access_key = TESTSECRET
 region = us-east-1
 """)
 
-        # Should work with config file only
         client = S3Client.from_aws_config(
             credentials_path=tmp_path / "nonexistent", config_path=config_file
         )
@@ -258,7 +237,6 @@ region = us-east-1
         assert client.region == "us-east-1"
 
     def test_no_credentials_anywhere(self, tmp_path: pathlib.Path):
-        """Test error when no credentials are found anywhere."""
         with pytest.raises(
             ValueError,
             match="aws_access_key_id not found for profile 'default' "
@@ -267,7 +245,6 @@ region = us-east-1
             S3Client.from_aws_config(credentials_path=tmp_path / "nonexistent")
 
     def test_missing_profile_in_credentials(self, tmp_path: pathlib.Path):
-        """Test error when profile doesn't exist in credentials."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[default]
 aws_access_key_id = DEFAULTKEY
@@ -284,7 +261,6 @@ aws_secret_access_key = DEFAULTSECRET
             )
 
     def test_missing_access_key(self, tmp_path: pathlib.Path):
-        """Test error when access key is missing."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[broken]
 aws_secret_access_key = TESTSECRET
@@ -299,7 +275,6 @@ region = us-east-1
             )
 
     def test_missing_secret_key(self, tmp_path: pathlib.Path):
-        """Test error when secret key is missing."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[broken]
 aws_access_key_id = TESTKEY
@@ -314,7 +289,6 @@ region = us-east-1
             )
 
     def test_extra_options_ignored(self, tmp_path: pathlib.Path):
-        """Test that extra options are ignored gracefully."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[extra]
 aws_access_key_id = EXTRAKEY
@@ -337,7 +311,6 @@ max_concurrent_requests = 10
 max_queue_size = 1000
 """)
 
-        # Should work fine and ignore unknown options
         client = S3Client.from_aws_config(
             profile_name="extra",
             credentials_path=credentials_file,
@@ -346,10 +319,9 @@ max_queue_size = 1000
 
         assert client.access_key == "EXTRAKEY"
         assert client.secret_key == "EXTRASECRET"
-        assert client.region == "us-east-1"  # credentials takes precedence
+        assert client.region == "us-east-1"
 
     def test_missing_config_file_ok(self, tmp_path: pathlib.Path):
-        """Test that missing config file is OK."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[test]
 aws_access_key_id = TESTKEY
@@ -368,7 +340,6 @@ region = us-west-2
         assert client.region == "us-west-2"
 
     def test_empty_files(self, tmp_path: pathlib.Path):
-        """Test behavior with empty files."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("")
 
@@ -385,7 +356,6 @@ region = us-west-2
             )
 
     def test_malformed_config_files(self, tmp_path: pathlib.Path):
-        """Test behavior with malformed config files."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[default
 aws_access_key_id = TESTKEY
@@ -397,7 +367,6 @@ invalid line without equals
         # This may not raise an error depending on configparser behavior
         try:
             client = S3Client.from_aws_config(credentials_path=credentials_file)
-            # If no error, verify it found what it could
             assert client.access_key == "TESTKEY"
             assert client.secret_key == "TESTSECRET"
         except Exception:
@@ -405,7 +374,6 @@ invalid line without equals
             pass
 
     def test_case_sensitivity(self, tmp_path: pathlib.Path):
-        """Test profile name case sensitivity."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[CaseSensitive]
 aws_access_key_id = CASEKEY
@@ -413,14 +381,12 @@ aws_secret_access_key = CASESECRET
 region = us-east-1
 """)
 
-        # Exact case should work
         client = S3Client.from_aws_config(
             profile_name="CaseSensitive", credentials_path=credentials_file
         )
         assert client.access_key == "CASEKEY"
 
     def test_credentials_from_config_file_only(self, tmp_path: pathlib.Path):
-        """Test loading credentials from config file only."""
         config_file = tmp_path / "config"
         config_file.write_text("""[default]
 aws_access_key_id = CONFIGKEY
@@ -450,7 +416,6 @@ region = eu-west-1
         assert client.region == "eu-west-1"
 
     def test_case_sensitivity_continued(self, tmp_path: pathlib.Path):
-        """Test profile name case sensitivity - different case should fail."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[CaseSensitive]
 aws_access_key_id = CASEKEY
@@ -469,7 +434,6 @@ region = us-east-1
             )
 
     def test_pathlib_path_objects(self, tmp_path: pathlib.Path):
-        """Test using pathlib.Path objects for file paths."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[pathlib]
 aws_access_key_id = PATHLIBKEY
@@ -477,18 +441,16 @@ aws_secret_access_key = PATHLIBSECRET
 region = us-east-1
 """)
 
-        # Test with pathlib.Path objects
         client = S3Client.from_aws_config(
             profile_name="pathlib",
             credentials_path=credentials_file,  # pathlib.Path object
-            config_path=tmp_path / "nonexistent",  # pathlib.Path object
+            config_path=tmp_path / "nonexistent",
         )
 
         assert client.access_key == "PATHLIBKEY"
         assert client.secret_key == "PATHLIBSECRET"
 
     def test_string_path_objects(self, tmp_path: pathlib.Path):
-        """Test using string paths."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[string]
 aws_access_key_id = STRINGKEY
@@ -496,19 +458,16 @@ aws_secret_access_key = STRINGSECRET
 region = us-east-1
 """)
 
-        # Test with string paths
         client = S3Client.from_aws_config(
             profile_name="string",
             credentials_path=str(credentials_file),  # string path
-            config_path=str(tmp_path / "nonexistent"),  # string path
+            config_path=str(tmp_path / "nonexistent"),
         )
 
         assert client.access_key == "STRINGKEY"
         assert client.secret_key == "STRINGSECRET"
 
     def test_default_paths(self, monkeypatch):
-        """Test default path behavior."""
-        # Create temp directory structure
         with tempfile.TemporaryDirectory() as temp_home:
             aws_dir = pathlib.Path(temp_home) / ".aws"
             aws_dir.mkdir()
@@ -525,7 +484,6 @@ region = us-east-1
 output = json
 """)
 
-            # Mock home directory
             monkeypatch.setattr(pathlib.Path, "home", lambda: pathlib.Path(temp_home))
 
             # Test with default paths (should find ~/.aws/credentials and ~/.aws/config)
@@ -536,7 +494,6 @@ output = json
             assert client.region == "us-east-1"
 
     def test_credentials_precedence_over_config_region(self, tmp_path: pathlib.Path):
-        """Test that credentials region takes precedence over config region."""
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[precedence]
 aws_access_key_id = PRECEDENCEKEY

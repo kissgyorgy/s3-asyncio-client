@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""S3 CLI interface using the s3-asyncio-client library."""
-
 import asyncio
 import json
 import os
@@ -16,10 +14,9 @@ from .client import S3Client
 @click.option("--profile", help="AWS profile name to use (default: 'default')")
 @click.pass_context
 def cli(ctx, config_file, profile):
-    """S3 CLI - A command line interface for S3 operations."""
+    """Uploading/download files to/from any S3 provider."""
     ctx.ensure_object(dict)
 
-    # Create S3Client from config file or environment variables
     if config_file or profile:
         try:
             client = S3Client.from_aws_config(
@@ -59,16 +56,14 @@ def cli(ctx, config_file, profile):
 @click.option("--metadata", help="JSON string of metadata key-value pairs")
 @click.pass_context
 def put(ctx, bucket, key, file_path, content_type, metadata):
-    """Upload a file to S3."""
+    """Upload a local file to S3."""
 
     async def _put():
         client = ctx.obj["client"]
 
-        # Read file data
         with open(file_path, "rb") as f:
             data = f.read()
 
-        # Parse metadata if provided
         metadata_dict = None
         if metadata:
             try:
@@ -100,7 +95,7 @@ def put(ctx, bucket, key, file_path, content_type, metadata):
 @click.argument("output_path", type=click.Path())
 @click.pass_context
 def get(ctx, bucket, key, output_path):
-    """Download a file from S3."""
+    """Download an object from S3 to a local file."""
 
     async def _get():
         client = ctx.obj["client"]
@@ -108,7 +103,6 @@ def get(ctx, bucket, key, output_path):
         async with client:
             result = await client.get_object(bucket=bucket, key=key)
 
-        # Write to output file
         with open(output_path, "wb") as f:
             f.write(result["body"])
 
@@ -131,7 +125,7 @@ def get(ctx, bucket, key, output_path):
 @click.argument("key")
 @click.pass_context
 def head(ctx, bucket, key):
-    """Get object metadata without downloading."""
+    """Get object metadata without downloading the object."""
 
     async def _head():
         client = ctx.obj["client"]
@@ -162,7 +156,7 @@ def head(ctx, bucket, key):
 @click.option("--max-keys", default=1000, help="Maximum number of objects to return")
 @click.pass_context
 def list(ctx, bucket, prefix, max_keys):
-    """List objects in a bucket."""
+    """List all objects in a bucket without downloading them."""
 
     async def _list():
         client = ctx.obj["client"]
@@ -199,7 +193,6 @@ def list(ctx, bucket, prefix, max_keys):
 @click.option("--expires-in", default=3600, help="URL expiration time in seconds")
 @click.pass_context
 def presigned_url(ctx, method, bucket, key, expires_in):
-    """Generate a presigned URL for S3 operations."""
     client = ctx.obj["client"]
 
     url = client.generate_presigned_url(
@@ -214,8 +207,6 @@ def presigned_url(ctx, method, bucket, key, expires_in):
 @click.argument("key")
 @click.pass_context
 def delete(ctx, bucket, key):
-    """Delete an object from S3."""
-
     async def _delete():
         client = ctx.obj["client"]
 
@@ -235,8 +226,6 @@ def delete(ctx, bucket, key):
 @click.argument("bucket")
 @click.pass_context
 def create_bucket(ctx, bucket):
-    """Create a new S3 bucket."""
-
     async def _create_bucket():
         client = ctx.obj["client"]
 
@@ -254,8 +243,6 @@ def create_bucket(ctx, bucket):
 @click.argument("bucket")
 @click.pass_context
 def delete_bucket(ctx, bucket):
-    """Delete an S3 bucket."""
-
     async def _delete_bucket():
         client = ctx.obj["client"]
 

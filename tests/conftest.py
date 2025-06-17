@@ -1,11 +1,8 @@
-"""Pytest configuration and fixtures."""
-
 import configparser
 import pathlib
 
 
 def pytest_addoption(parser):
-    """Add custom command line options for pytest."""
     parser.addoption(
         "--aws-config",
         action="store",
@@ -15,14 +12,7 @@ def pytest_addoption(parser):
 
 
 def get_aws_profiles(config_path: str | None) -> list[str]:
-    """Extract all profiles from AWS config file.
-
-    Args:
-        config_path: Path to AWS config file or None for default minio profile
-
-    Returns:
-        List of profile names
-    """
+    """Parse all profiles from AWS config file. To use in tests for real S3 access."""
     if not config_path:
         return ["minio-default"]
 
@@ -49,8 +39,6 @@ def get_aws_profiles(config_path: str | None) -> list[str]:
 
 
 def pytest_generate_tests(metafunc):
-    """Generate test parameters dynamically based on AWS config profiles."""
-
     if "client" not in metafunc.fixturenames:
         return
     aws_config_path = metafunc.config.getoption("--aws-config")

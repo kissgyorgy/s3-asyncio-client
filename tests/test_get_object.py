@@ -1,14 +1,9 @@
-"""Unit tests for get_object method."""
-
-
 from s3_asyncio_client import S3Client
 
 
 async def test_get_object_basic(monkeypatch):
-    """Test basic get_object functionality."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the response
     class MockResponse:
         headers = {
             "Content-Type": "text/plain",
@@ -25,7 +20,6 @@ async def test_get_object_basic(monkeypatch):
 
     mock_response = MockResponse()
 
-    # Track calls to _make_request
     calls = []
 
     async def mock_make_request(**kwargs):
@@ -39,7 +33,6 @@ async def test_get_object_basic(monkeypatch):
         key="test-key",
     )
 
-    # Check that _make_request was called correctly
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
@@ -47,7 +40,6 @@ async def test_get_object_basic(monkeypatch):
         "key": "test-key",
     }
 
-    # Check result
     assert result["body"] == b"Hello, World!"
     assert result["content_type"] == "text/plain"
     assert result["content_length"] == 13
@@ -59,10 +51,8 @@ async def test_get_object_basic(monkeypatch):
 
 
 async def test_get_object_with_metadata(monkeypatch):
-    """Test get_object with custom metadata."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the response with metadata headers
     class MockResponse:
         headers = {
             "Content-Type": "application/json",
@@ -89,7 +79,6 @@ async def test_get_object_with_metadata(monkeypatch):
 
     result = await client.get_object("test-bucket", "test-key")
 
-    # Check metadata extraction
     assert result["metadata"]["author"] == "test-user"
     assert result["metadata"]["purpose"] == "testing"
     assert result["version_id"] == "version123"
@@ -98,7 +87,6 @@ async def test_get_object_with_metadata(monkeypatch):
 
 
 async def test_get_object_empty_content(monkeypatch):
-    """Test get_object with empty content."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     class MockResponse:
@@ -128,7 +116,6 @@ async def test_get_object_empty_content(monkeypatch):
 
 
 async def test_get_object_binary_data(monkeypatch):
-    """Test get_object with binary data."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     binary_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"  # PNG header
@@ -161,12 +148,10 @@ async def test_get_object_binary_data(monkeypatch):
 
 
 async def test_get_object_missing_headers(monkeypatch):
-    """Test get_object when some headers are missing."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock response with minimal headers
     class MockResponse:
-        headers = {}  # No headers
+        headers = {}
 
         async def read(self):
             return b"minimal"
@@ -183,7 +168,6 @@ async def test_get_object_missing_headers(monkeypatch):
 
     result = await client.get_object("test-bucket", "minimal-key")
 
-    # Check default values when headers are missing
     assert result["body"] == b"minimal"
     assert result["content_type"] is None
     assert result["content_length"] == 0

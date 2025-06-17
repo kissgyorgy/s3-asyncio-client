@@ -1,5 +1,3 @@
-"""Tests for AWS Signature Version 4 authentication."""
-
 import datetime as dt
 import hashlib
 import urllib.parse
@@ -11,7 +9,6 @@ from s3_asyncio_client.auth import AWSSignatureV4
 
 @pytest.fixture
 def auth():
-    """Create AWSSignatureV4 instance for testing."""
     return AWSSignatureV4(
         access_key="AKIAIOSFODNN7EXAMPLE",
         secret_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
@@ -21,7 +18,6 @@ def auth():
 
 @pytest.fixture
 def mock_datetime(monkeypatch):
-    """Create a mock datetime that returns a fixed time for testing."""
     mock_now = dt.datetime(2023, 1, 1, 12, 0, 0)
 
     class MockDatetime:
@@ -38,14 +34,12 @@ def mock_datetime(monkeypatch):
 
 
 def test_sha256_hash(auth):
-    """Test SHA256 hashing."""
     test_data = b"hello world"
     expected = hashlib.sha256(test_data).hexdigest()
     assert auth._sha256_hash(test_data) == expected
 
 
 def test_hmac_sha256(auth):
-    """Test HMAC-SHA256 signing."""
     key = b"test-key"
     data = "test-data"
     result = auth._hmac_sha256(key, data)
@@ -54,7 +48,6 @@ def test_hmac_sha256(auth):
 
 
 def test_get_signature_key(auth):
-    """Test signature key derivation."""
     date_stamp = "20230101"
     key = auth._get_signature_key(date_stamp)
     assert isinstance(key, bytes)
@@ -62,7 +55,6 @@ def test_get_signature_key(auth):
 
 
 def test_create_canonical_request(auth):
-    """Test canonical request creation."""
     method = "GET"
     uri = "/test-bucket/test-key"
     query_string = "x-amz-algorithm=AWS4-HMAC-SHA256"
@@ -85,7 +77,6 @@ def test_create_canonical_request(auth):
 
 
 def test_create_string_to_sign(auth):
-    """Test string to sign creation."""
     timestamp = "20230101T120000Z"
     date_stamp = "20230101"
     canonical_request = "GET\n/\n\nhost:example.com\n\nhost\nUNSIGNED-PAYLOAD"
@@ -100,21 +91,17 @@ def test_create_string_to_sign(auth):
 
 
 def test_sign_request(auth, mock_datetime):
-    """Test request signing."""
-
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     headers = {"user-agent": "test-client"}
 
     signed_headers = auth.sign_request(method, url, headers)
 
-    # Check required headers are present
     assert "Authorization" in signed_headers
     assert "x-amz-date" in signed_headers
     assert "host" in signed_headers
     assert "x-amz-content-sha256" in signed_headers
 
-    # Check authorization header format
     auth_header = signed_headers["Authorization"]
     assert auth_header.startswith("AWS4-HMAC-SHA256")
     assert "Credential=" in auth_header
@@ -123,22 +110,17 @@ def test_sign_request(auth, mock_datetime):
 
 
 def test_sign_request_with_payload(auth, mock_datetime):
-    """Test request signing with payload."""
-
     method = "PUT"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     payload = b"test content"
 
     signed_headers = auth.sign_request(method, url, payload=payload)
 
-    # Check payload hash is calculated
     expected_hash = hashlib.sha256(payload).hexdigest()
     assert signed_headers["x-amz-content-sha256"] == expected_hash
 
 
 def test_sign_request_with_query_params(auth, mock_datetime):
-    """Test request signing with query parameters."""
-
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     query_params = {"prefix": "test", "max-keys": "100"}
@@ -150,19 +132,15 @@ def test_sign_request_with_query_params(auth, mock_datetime):
 
 
 def test_create_presigned_url(auth, mock_datetime):
-    """Test presigned URL creation."""
-
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     expires_in = 3600
 
     presigned_url = auth.create_presigned_url(method, url, expires_in)
 
-    # Parse the URL to check query parameters
     parsed = urllib.parse.urlparse(presigned_url)
     query_params = urllib.parse.parse_qs(parsed.query)
 
-    # Check required AWS query parameters
     assert "X-Amz-Algorithm" in query_params
     assert "X-Amz-Credential" in query_params
     assert "X-Amz-Date" in query_params
@@ -170,29 +148,24 @@ def test_create_presigned_url(auth, mock_datetime):
     assert "X-Amz-SignedHeaders" in query_params
     assert "X-Amz-Signature" in query_params
 
-    # Check specific values
     assert query_params["X-Amz-Algorithm"][0] == "AWS4-HMAC-SHA256"
     assert query_params["X-Amz-Expires"][0] == str(expires_in)
     assert "AKIAIOSFODNN7EXAMPLE" in query_params["X-Amz-Credential"][0]
 
 
 def test_create_presigned_url_with_query_params(auth, mock_datetime):
-    """Test presigned URL creation with additional query parameters."""
-
     method = "GET"
     url = "https://test-bucket.s3.amazonaws.com/test-key"
     query_params = {"response-content-type": "text/plain"}
 
     presigned_url = auth.create_presigned_url(method, url, query_params=query_params)
 
-    # Check that custom query parameters are included
     parsed = urllib.parse.urlparse(presigned_url)
     query_dict = urllib.parse.parse_qs(parsed.query)
     assert "response-content-type" in query_dict
 
 
 def test_auth_initialization():
-    """Test authentication initialization with different parameters."""
     auth1 = AWSSignatureV4("key", "secret")
     assert auth1.region == "us-east-1"  # default
 
@@ -201,7 +174,6 @@ def test_auth_initialization():
 
 
 def test_canonical_uri_encoding(auth):
-    """Test that URI encoding works correctly in canonical requests."""
     method = "GET"
     uri = "/test bucket/test key with spaces"
     query_string = ""
@@ -213,5 +185,4 @@ def test_canonical_uri_encoding(auth):
         method, uri, query_string, headers, signed_headers, payload_hash
     )
 
-    # Check that the URI is properly encoded
     assert "/test%20bucket/test%20key%20with%20spaces" in canonical_request

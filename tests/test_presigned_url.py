@@ -1,13 +1,9 @@
-"""Unit tests for generate_presigned_url method."""
-
 from s3_asyncio_client import S3Client
 
 
 def test_generate_presigned_url_basic(monkeypatch):
-    """Test basic presigned URL generation."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
-    # Mock the auth create_presigned_url method
     calls = []
 
     def mock_create_presigned_url(**kwargs):
@@ -22,7 +18,6 @@ def test_generate_presigned_url_basic(monkeypatch):
         key="test-key",
     )
 
-    # Check that auth method was called correctly
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
@@ -37,7 +32,6 @@ def test_generate_presigned_url_basic(monkeypatch):
 
 
 def test_generate_presigned_url_with_params(monkeypatch):
-    """Test presigned URL generation with custom parameters."""
     client = S3Client("test-key", "test-secret", "us-east-1")
 
     calls = []
@@ -57,7 +51,6 @@ def test_generate_presigned_url_with_params(monkeypatch):
         params=params,
     )
 
-    # Check parameters
     assert len(calls) == 1
     assert calls[0] == {
         "method": "PUT",
@@ -70,7 +63,6 @@ def test_generate_presigned_url_with_params(monkeypatch):
 
 
 def test_generate_presigned_url_custom_endpoint(monkeypatch):
-    """Test presigned URL generation with custom endpoint."""
     client = S3Client(
         "test-key", "test-secret", "us-east-1", endpoint_url="https://minio.example.com"
     )
@@ -89,7 +81,6 @@ def test_generate_presigned_url_custom_endpoint(monkeypatch):
         key="my-key",
     )
 
-    # Check that custom endpoint URL is used
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",

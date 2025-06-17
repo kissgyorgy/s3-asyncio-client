@@ -1,5 +1,3 @@
-"""Tests for S3Client."""
-
 import pytest
 
 from s3_asyncio_client.client import S3Client
@@ -14,7 +12,6 @@ from s3_asyncio_client.exceptions import (
 
 @pytest.fixture
 def client():
-    """Create S3Client instance for testing."""
     return S3Client(
         access_key="test-access-key",
         secret_key="test-secret-key",
@@ -24,7 +21,6 @@ def client():
 
 @pytest.fixture
 def client_custom_endpoint():
-    """Create S3Client with custom endpoint for testing."""
     return S3Client(
         access_key="test-access-key",
         secret_key="test-secret-key",
@@ -34,7 +30,6 @@ def client_custom_endpoint():
 
 
 def test_client_initialization(client):
-    """Test client initialization."""
     assert client.access_key == "test-access-key"
     assert client.secret_key == "test-secret-key"
     assert client.region == "us-east-1"
@@ -43,21 +38,16 @@ def test_client_initialization(client):
 
 
 def test_client_initialization_custom_endpoint(client_custom_endpoint):
-    """Test client initialization with custom endpoint."""
     assert client_custom_endpoint.endpoint_url == "https://minio.example.com"
 
 
 def test_build_url_virtual_hosted_style(client):
-    """Test URL building with virtual hosted-style."""
-    # Bucket only
     url = client._build_url("test-bucket")
     assert url == "https://test-bucket.s3.us-east-1.amazonaws.com"
 
-    # Bucket and key
     url = client._build_url("test-bucket", "path/to/file.txt")
     assert url == "https://test-bucket.s3.us-east-1.amazonaws.com/path/to/file.txt"
 
-    # Key with special characters
     url = client._build_url("test-bucket", "path with spaces/file.txt")
     assert (
         url
@@ -66,18 +56,14 @@ def test_build_url_virtual_hosted_style(client):
 
 
 def test_build_url_path_style(client_custom_endpoint):
-    """Test URL building with path-style for custom endpoints."""
-    # Bucket only
     url = client_custom_endpoint._build_url("test-bucket")
     assert url == "https://minio.example.com/test-bucket"
 
-    # Bucket and key
     url = client_custom_endpoint._build_url("test-bucket", "path/to/file.txt")
     assert url == "https://minio.example.com/test-bucket/path/to/file.txt"
 
 
 def test_parse_error_response_xml(client):
-    """Test parsing of XML error responses."""
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>NoSuchKey</Code>
@@ -92,7 +78,6 @@ def test_parse_error_response_xml(client):
 
 
 def test_parse_error_response_access_denied(client):
-    """Test parsing of access denied error."""
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>AccessDenied</Code>
@@ -104,7 +89,6 @@ def test_parse_error_response_access_denied(client):
 
 
 def test_parse_error_response_invalid_request(client):
-    """Test parsing of invalid request error."""
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>InvalidRequest</Code>
@@ -116,7 +100,6 @@ def test_parse_error_response_invalid_request(client):
 
 
 def test_parse_error_response_client_error(client):
-    """Test parsing of generic client error."""
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>SomeClientError</Code>
@@ -130,7 +113,6 @@ def test_parse_error_response_client_error(client):
 
 
 def test_parse_error_response_server_error(client):
-    """Test parsing of server error."""
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>InternalError</Code>
@@ -143,7 +125,6 @@ def test_parse_error_response_server_error(client):
 
 
 def test_parse_error_response_malformed_xml(client):
-    """Test parsing of malformed XML response."""
     malformed_xml = "<Error><Code>Test</Error>"  # Missing closing tag
 
     exception = client._parse_error_response(500, malformed_xml)
@@ -152,7 +133,6 @@ def test_parse_error_response_malformed_xml(client):
 
 
 def test_parse_error_response_no_xml(client):
-    """Test parsing of non-XML error response."""
     plain_text = "Internal Server Error"
 
     exception = client._parse_error_response(500, plain_text)
@@ -161,7 +141,6 @@ def test_parse_error_response_no_xml(client):
 
 
 def test_parse_error_response_status_code_precedence(client):
-    """Test that status code takes precedence over error code for specific errors."""
     # 404 status should create S3NotFoundError regardless of error code
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
@@ -174,16 +153,12 @@ def test_parse_error_response_status_code_precedence(client):
 
 
 async def test_context_manager():
-    """Test async context manager functionality."""
     async with S3Client("key", "secret") as client:
         assert client._session is not None
     # Session should be closed after exiting context
 
 
 async def test_methods_are_implemented(client, monkeypatch):
-    """Test that methods are implemented and don't raise NotImplementedError."""
-    # Mock the _make_request method to avoid actual network calls
-
     class MockResponse:
         headers = {"ETag": '"test"'}
 
@@ -207,7 +182,6 @@ async def test_methods_are_implemented(client, monkeypatch):
     monkeypatch.setattr(client, "_make_request", mock_make_request)
     monkeypatch.setattr(client._auth, "create_presigned_url", mock_create_presigned_url)
 
-    # These should not raise NotImplementedError anymore
     await client.put_object("bucket", "key", b"data")
     await client.get_object("bucket", "key")
     await client.head_object("bucket", "key")
@@ -216,7 +190,6 @@ async def test_methods_are_implemented(client, monkeypatch):
 
 
 async def test_ensure_session(client):
-    """Test session creation."""
     assert client._session is None
     await client._ensure_session()
     assert client._session is not None
@@ -224,7 +197,6 @@ async def test_ensure_session(client):
 
 
 async def test_close_session(client):
-    """Test session cleanup."""
     await client._ensure_session()
     assert client._session is not None
     await client.close()
@@ -232,8 +204,6 @@ async def test_close_session(client):
 
 
 async def test_create_bucket(client, monkeypatch):
-    """Test create_bucket method."""
-
     class MockResponse:
         headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
 
@@ -242,7 +212,6 @@ async def test_create_bucket(client, monkeypatch):
 
     mock_response = MockResponse()
 
-    # Track calls to _make_request
     calls = []
 
     async def mock_make_request(**kwargs):
@@ -253,16 +222,14 @@ async def test_create_bucket(client, monkeypatch):
 
     result = await client.create_bucket("test-bucket")
 
-    # Check that _make_request was called with correct parameters
     assert len(calls) == 1
     call_args = calls[0]
 
     assert call_args["method"] == "PUT"
     assert call_args["bucket"] == "test-bucket"
-    assert call_args.get("key") is None  # No key for bucket creation
-    assert call_args.get("headers") is None  # No special headers needed
-    assert call_args.get("params") is None  # No query parameters needed
-    assert call_args.get("data") is None  # No data for bucket creation
+    assert call_args.get("key") is None
+    assert call_args.get("headers") is None
+    assert call_args.get("params") is None
+    assert call_args.get("data") is None
 
-    # Check result
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
