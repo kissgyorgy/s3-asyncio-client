@@ -55,8 +55,8 @@ def cli(ctx, config_file, profile):
 @click.option("--content-type", help="Content type of the object")
 @click.option("--metadata", help="JSON string of metadata key-value pairs")
 @click.pass_context
-def put(ctx, bucket, key, file_path, content_type, metadata):
-    """Upload a local file to S3."""
+def put_object(ctx, bucket, key, file_path, content_type, metadata):
+    """Upload a local file to an S3 bucket."""
 
     async def _put():
         client = ctx.obj["client"]
@@ -94,7 +94,7 @@ def put(ctx, bucket, key, file_path, content_type, metadata):
 @click.argument("key")
 @click.argument("output_path", type=click.Path())
 @click.pass_context
-def get(ctx, bucket, key, output_path):
+def get_object(ctx, bucket, key, output_path):
     """Download an object from S3 to a local file."""
 
     async def _get():
@@ -124,7 +124,7 @@ def get(ctx, bucket, key, output_path):
 @click.argument("bucket")
 @click.argument("key")
 @click.pass_context
-def head(ctx, bucket, key):
+def head_object(ctx, bucket, key):
     """Get object metadata without downloading the object."""
 
     async def _head():
@@ -155,7 +155,7 @@ def head(ctx, bucket, key):
 @click.option("--prefix", help="Object key prefix filter")
 @click.option("--max-keys", default=1000, help="Maximum number of objects to return")
 @click.pass_context
-def list(ctx, bucket, prefix, max_keys):
+def list_objects(ctx, bucket, prefix, max_keys):
     """List all objects in a bucket without downloading them."""
 
     async def _list():
@@ -192,7 +192,8 @@ def list(ctx, bucket, prefix, max_keys):
 @click.argument("key")
 @click.option("--expires-in", default=3600, help="URL expiration time in seconds")
 @click.pass_context
-def presigned_url(ctx, method, bucket, key, expires_in):
+def presign_url(ctx, method, bucket, key, expires_in):
+    """Create a pre-signed URL for a single operation later."""
     client = ctx.obj["client"]
 
     url = client.generate_presigned_url(
@@ -206,7 +207,9 @@ def presigned_url(ctx, method, bucket, key, expires_in):
 @click.argument("bucket")
 @click.argument("key")
 @click.pass_context
-def delete(ctx, bucket, key):
+def delete_object(ctx, bucket, key):
+    """Delete an object from an S3 bucket."""
+
     async def _delete():
         client = ctx.obj["client"]
 
@@ -226,6 +229,8 @@ def delete(ctx, bucket, key):
 @click.argument("bucket")
 @click.pass_context
 def create_bucket(ctx, bucket):
+    """Create a new S3 bucket."""
+
     async def _create_bucket():
         client = ctx.obj["client"]
 
@@ -243,6 +248,8 @@ def create_bucket(ctx, bucket):
 @click.argument("bucket")
 @click.pass_context
 def delete_bucket(ctx, bucket):
+    """Delete an existing S3 bucket."""
+
     async def _delete_bucket():
         client = ctx.obj["client"]
 
