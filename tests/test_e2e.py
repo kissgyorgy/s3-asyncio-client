@@ -17,22 +17,17 @@ from s3_asyncio_client.exceptions import S3NotFoundError
 @pytest.fixture
 async def client(request):
     """S3Client with a dedicated test bucket created using create_bucket."""
-    aws_config_path = request.config.getoption("--aws-config")
-    profile_name = request.param
+    aws_config_path = request.config.getoption("--aws-config") or "tmp/ovh_config"
+    profile_name = request.param or "ovh"
 
     bucket_name = "s3-async-client-e2e-created-test-bucket"
-    
-    if aws_config_path and profile_name != "minio-default":
-        s3_client = S3Client.from_aws_config(bucket_name, profile_name, aws_config_path)
-    else:
-        # Default minio configuration
-        s3_client = S3Client(
-            access_key="minioadmin",
-            secret_key="minioadmin",
-            region="us-east-1",
-            endpoint_url="https://s3.us-east-1.amazonaws.com",
-            bucket=bucket_name,
-        )
+
+    # Use from_aws_config with the OVH configuration
+    s3_client = S3Client.from_aws_config(
+        bucket=bucket_name, 
+        profile_name=profile_name, 
+        config_path=aws_config_path
+    )
 
     async with s3_client:
         try:
@@ -147,7 +142,6 @@ def test_files():
 async def test_create_bucket_fixture(client):
     """Test that the fixture with create_bucket works."""
     s3_client = client["client"]
-    bucket = client["bucket"]
 
     result = await s3_client.list_objects()
     assert "objects" in result
@@ -156,10 +150,7 @@ async def test_create_bucket_fixture(client):
     test_data = b"Hello from session bucket test!"
     key = "test-key.txt"
     put_result = await s3_client.put_object(
-        bucket=bucket,
-        key=key,
-        data=test_data,
-        content_type="text/plain",
+        key, data=test_data, content_type="text/plain"
     )
 
     assert "etag" in put_result
@@ -171,13 +162,11 @@ async def test_create_bucket_fixture(client):
 async def test_put_get_text_file(client, test_files):
     """Test uploading and downloading a text file."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "test-files/hello.txt"
 
     result = await s3_client.put_object(
-        bucket=bucket,
-        key=key,
+        key,
         data=file_info["content"],
         content_type=file_info["content_type"],
         metadata={"author": "pytest", "test": "e2e"},
@@ -196,12 +185,10 @@ async def test_put_get_text_file(client, test_files):
 
 async def test_put_get_json_file(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["json"]
     key = "test-files/data.json"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -221,12 +208,10 @@ async def test_put_get_json_file(client, test_files):
 
 async def test_put_get_binary_file(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["binary"]
     key = "test-files/binary.dat"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -247,7 +232,6 @@ async def test_head_object(client, test_files):
     key = "test-files/metadata-test.txt"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -275,7 +259,6 @@ async def test_list_objects(client, test_files):
 
     for key, file_info in files_to_upload:
         await s3_client.put_object(
-            bucket=bucket,
             key=key,
             data=file_info["content"],
             content_type=file_info["content_type"],
@@ -301,7 +284,6 @@ async def test_upload_file_single_part(client, test_files):
 
     # Use upload_file method for small file (should use single-part)
     result = await s3_client.upload_file(
-        bucket=bucket,
         key=key,
         file_source=file_info["path"],
         content_type=file_info["content_type"],
@@ -349,7 +331,6 @@ async def test_upload_large_file_multipart(client, test_files):
         progress_calls.append(bytes_transferred)
 
     result = await s3_client.upload_file(
-        bucket=bucket,
         key=key,
         file_source=file_obj,
         config=config,
@@ -386,7 +367,6 @@ async def test_delete_object(client, test_files):
     key = "temp/delete-me.txt"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -411,7 +391,6 @@ async def test_file_upload_download_cycle(client, test_files):
         key = f"cycle-test/{file_type}-file"
 
         await s3_client.put_object(
-            bucket=bucket,
             key=key,
             data=file_info["content"],
             content_type=file_info["content_type"],
@@ -454,7 +433,6 @@ async def test_metadata_preservation(client, test_files):
     }
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -494,7 +472,6 @@ async def test_presigned_url_download(client, test_files):
     key = "presigned-test/download-test.txt"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -503,14 +480,12 @@ async def test_presigned_url_download(client, test_files):
 
     presigned_url = s3_client.generate_presigned_url(
         method="GET",
-        bucket=bucket,
         key=key,
         expires_in=3600,
     )
 
     assert presigned_url.startswith("http")
-    effective_bucket = s3_client.get_effective_bucket_name(bucket)
-    assert effective_bucket in presigned_url
+    assert bucket in presigned_url
     assert key in presigned_url
     assert "X-Amz-Algorithm" in presigned_url
     assert "X-Amz-Credential" in presigned_url
@@ -538,15 +513,13 @@ async def test_presigned_url_upload(client, test_files):
 
     presigned_url = s3_client.generate_presigned_url(
         method="PUT",
-        bucket=bucket,
         key=key,
         expires_in=3600,
         params={"Content-Type": file_info["content_type"]},
     )
 
     assert presigned_url.startswith("http")
-    effective_bucket = s3_client.get_effective_bucket_name(bucket)
-    assert effective_bucket in presigned_url
+    assert bucket in presigned_url
     assert key in presigned_url
     assert "X-Amz-Algorithm" in presigned_url
     assert "Content-Type" in presigned_url
@@ -572,7 +545,6 @@ async def test_presigned_url_with_custom_params(client, test_files):
     key = "presigned-test/custom-params.dat"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -580,7 +552,6 @@ async def test_presigned_url_with_custom_params(client, test_files):
 
     presigned_url = s3_client.generate_presigned_url(
         method="GET",
-        bucket=bucket,
         key=key,
         expires_in=30 * 60,
         params={
@@ -615,7 +586,6 @@ async def test_presigned_url_expiration(client, test_files):
     key = "presigned-test/expiration-test.txt"
 
     await s3_client.put_object(
-        bucket=bucket,
         key=key,
         data=file_info["content"],
         content_type=file_info["content_type"],
@@ -623,7 +593,6 @@ async def test_presigned_url_expiration(client, test_files):
 
     presigned_url = s3_client.generate_presigned_url(
         method="GET",
-        bucket=bucket,
         key=key,
         expires_in=1,
     )
@@ -648,7 +617,6 @@ async def test_presigned_url_multipart_upload(client, test_files):
 
     presigned_url = s3_client.generate_presigned_url(
         method="PUT",
-        bucket=bucket,
         key=key,
         expires_in=3600,
         params={"Content-Type": file_info["content_type"]},
@@ -678,7 +646,6 @@ async def test_presigned_url_binary_content(client, test_files):
 
     presigned_upload_url = s3_client.generate_presigned_url(
         method="PUT",
-        bucket=bucket,
         key=key,
         expires_in=3600,
         params={"Content-Type": file_info["content_type"]},
@@ -694,7 +661,6 @@ async def test_presigned_url_binary_content(client, test_files):
 
     presigned_download_url = s3_client.generate_presigned_url(
         method="GET",
-        bucket=bucket,
         key=key,
         expires_in=3600,
     )

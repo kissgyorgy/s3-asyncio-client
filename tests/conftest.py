@@ -14,11 +14,11 @@ def pytest_addoption(parser):
 def get_aws_profiles(config_path: str | None) -> list[str]:
     """Parse all profiles from AWS config file. To use in tests for real S3 access."""
     if not config_path:
-        return ["minio-default"]
+        config_path = "tmp/ovh_config"
 
     config_file = pathlib.Path(config_path)
     if not config_file.exists():
-        return ["minio-default"]
+        return ["ovh"]
 
     parser = configparser.ConfigParser()
     parser.read(config_file)
@@ -35,7 +35,7 @@ def get_aws_profiles(config_path: str | None) -> list[str]:
             # Credentials file uses direct profile names
             profiles.append(section_name)
 
-    return profiles if profiles else ["minio-default"]
+    return profiles if profiles else ["ovh"]
 
 
 def pytest_generate_tests(metafunc):
