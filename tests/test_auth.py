@@ -3,6 +3,7 @@ import hashlib
 import urllib.parse
 
 import pytest
+from yarl import URL
 
 from s3_asyncio_client.auth import AWSSignatureV4
 

@@ -203,12 +203,5 @@ class AWSSignatureV4:
 
         query_params["X-Amz-Signature"] = signature
 
-        final_query_string = "&".join(
-            [
-                f"{urllib.parse.quote(k, safe='')}="
-                f"{urllib.parse.quote(str(v), safe='')}"
-                for k, v in sorted(query_params.items())
-            ]
-        )
-
-        return str(url.with_query(final_query_string))
+        # Use query_params directly with yarl URL to avoid double encoding
+        return str(url.with_query(query_params))
