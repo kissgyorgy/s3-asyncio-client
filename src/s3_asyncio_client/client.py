@@ -371,10 +371,38 @@ class S3Client:
     async def create_bucket(
         self,
         bucket: str,
+        region: str | None = None,
+        acl: str | None = None,
+        object_lock_enabled: bool | None = None,
+        object_ownership: str | None = None,
     ) -> dict[str, Any]:
+        headers = {}
+        data = None
+
+        # Set optional headers
+        if acl:
+            headers["x-amz-acl"] = acl
+        if object_lock_enabled is not None:
+            headers["x-amz-bucket-object-lock-enabled"] = str(
+                object_lock_enabled
+            ).lower()
+        if object_ownership:
+            headers["x-amz-object-ownership"] = object_ownership
+
+        # Create LocationConstraint XML body if region is specified and not us-east-1
+        if region and region != "us-east-1":
+            location_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <LocationConstraint>{region}</LocationConstraint>
+</CreateBucketConfiguration>"""
+            data = location_xml.encode("utf-8")
+            headers["Content-Type"] = "application/xml"
+
         response = await self._make_request(
             method="PUT",
             bucket=bucket,
+            headers=headers if headers else None,
+            data=data,
         )
 
         result = {
