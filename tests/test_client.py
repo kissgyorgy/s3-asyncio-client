@@ -341,3 +341,147 @@ async def test_create_bucket_with_acl_and_object_lock(client, monkeypatch):
     assert call_args.get("data") is None
 
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
+
+
+async def test_create_bucket_with_grant_headers(client, monkeypatch):
+    class MockResponse:
+        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
+
+    result = await client.create_bucket(
+        "test-bucket",
+        grant_full_control="id=canonical-user-id",
+        grant_read="id=canonical-user-id",
+        grant_read_acp="id=canonical-user-id",
+        grant_write="id=canonical-user-id",
+        grant_write_acp="id=canonical-user-id",
+    )
+
+    assert len(calls) == 1
+    call_args = calls[0]
+
+    assert call_args["method"] == "PUT"
+    assert call_args["bucket"] == "test-bucket"
+    assert call_args.get("key") is None
+    headers = call_args["headers"]
+    assert headers["x-amz-grant-full-control"] == "id=canonical-user-id"
+    assert headers["x-amz-grant-read"] == "id=canonical-user-id"
+    assert headers["x-amz-grant-read-acp"] == "id=canonical-user-id"
+    assert headers["x-amz-grant-write"] == "id=canonical-user-id"
+    assert headers["x-amz-grant-write-acp"] == "id=canonical-user-id"
+    assert call_args.get("params") is None
+    assert call_args.get("data") is None
+
+    assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
+
+
+async def test_create_bucket_directory_bucket_with_location(client, monkeypatch):
+    class MockResponse:
+        headers = {
+            "Location": "https://test-bucket--use1-az1--x-s3.s3express-use1-az1.us-east-1.amazonaws.com/"
+        }
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
+
+    result = await client.create_bucket(
+        "test-bucket--use1-az1--x-s3",
+        location_name="use1-az1",
+        location_type="AvailabilityZone",
+        bucket_type="Directory",
+        data_redundancy="SingleAvailabilityZone",
+    )
+
+    assert len(calls) == 1
+    call_args = calls[0]
+
+    assert call_args["method"] == "PUT"
+    assert call_args["bucket"] == "test-bucket--use1-az1--x-s3"
+    assert call_args.get("key") is None
+    assert call_args["headers"]["Content-Type"] == "application/xml"
+    assert call_args.get("params") is None
+
+    # Check that the XML body contains the Location and Bucket elements
+    data = call_args["data"].decode("utf-8")
+    assert "<Location>" in data
+    assert "<Name>use1-az1</Name>" in data
+    assert "<Type>AvailabilityZone</Type>" in data
+    assert "<Bucket>" in data
+    assert "<DataRedundancy>SingleAvailabilityZone</DataRedundancy>" in data
+    assert "<Type>Directory</Type>" in data
+    assert "CreateBucketConfiguration" in data
+
+    assert (
+        result["location"]
+        == "https://test-bucket--use1-az1--x-s3.s3express-use1-az1.us-east-1.amazonaws.com/"
+    )
+
+
+async def test_create_bucket_mixed_configuration(client, monkeypatch):
+    class MockResponse:
+        headers = {"Location": "https://test-bucket.s3.eu-west-1.amazonaws.com/"}
+
+        def close(self):
+            pass
+
+    mock_response = MockResponse()
+
+    calls = []
+
+    async def mock_make_request(**kwargs):
+        calls.append(kwargs)
+        return mock_response
+
+    monkeypatch.setattr(client, "_make_request", mock_make_request)
+
+    result = await client.create_bucket(
+        "test-bucket",
+        region="eu-west-1",
+        acl="private",
+        grant_full_control="id=canonical-user-id",
+        object_lock_enabled=True,
+        object_ownership="BucketOwnerPreferred",
+    )
+
+    assert len(calls) == 1
+    call_args = calls[0]
+
+    assert call_args["method"] == "PUT"
+    assert call_args["bucket"] == "test-bucket"
+    assert call_args.get("key") is None
+    headers = call_args["headers"]
+    assert headers["x-amz-acl"] == "private"
+    assert headers["x-amz-grant-full-control"] == "id=canonical-user-id"
+    assert headers["x-amz-bucket-object-lock-enabled"] == "true"
+    assert headers["x-amz-object-ownership"] == "BucketOwnerPreferred"
+    assert headers["Content-Type"] == "application/xml"
+    assert call_args.get("params") is None
+
+    # Check that the XML body contains the LocationConstraint
+    data = call_args["data"].decode("utf-8")
+    assert "<LocationConstraint>eu-west-1</LocationConstraint>" in data
+    assert "CreateBucketConfiguration" in data
+
+    assert result["location"] == "https://test-bucket.s3.eu-west-1.amazonaws.com/"
