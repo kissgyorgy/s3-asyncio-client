@@ -490,7 +490,7 @@ class S3Client:
         expires_in: int = 3600,
         params: dict[str, str] | None = None,
     ) -> str:
-        url = URL(self.bucket_url) / key
+        url = self.bucket_url / key
         return self._auth.create_presigned_url(method, url, expires_in, params)
 
     async def upload_file(

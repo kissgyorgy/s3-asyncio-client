@@ -20,13 +20,15 @@ async def client(request):
     aws_config_path = request.config.getoption("--aws-config") or "tmp/ovh_config"
     profile_name = request.param or "ovh"
 
-    bucket_name = "s3-async-client-e2e-created-test-bucket"
+    # For DigitalOcean, use the bucket name that's already in the endpoint URL
+    if profile_name == "digitalocean":
+        bucket_name = "test-s3-asyncio-client"
+    else:
+        bucket_name = "s3-async-client-e2e-created-test-bucket"
 
     # Use from_aws_config with the OVH configuration
     s3_client = S3Client.from_aws_config(
-        bucket=bucket_name, 
-        profile_name=profile_name, 
-        config_path=aws_config_path
+        bucket=bucket_name, profile_name=profile_name, config_path=aws_config_path
     )
 
     async with s3_client:
