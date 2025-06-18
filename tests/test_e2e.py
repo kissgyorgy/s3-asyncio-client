@@ -229,7 +229,6 @@ async def test_put_get_binary_file(client, test_files):
 async def test_head_object(client, test_files):
     """Test getting object metadata without downloading."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "test-files/metadata-test.txt"
 
@@ -251,7 +250,6 @@ async def test_head_object(client, test_files):
 async def test_list_objects(client, test_files):
     """Test listing objects with different prefixes."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     files_to_upload = [
         ("docs/readme.txt", test_files["text"]),
         ("docs/api.json", test_files["json"]),
@@ -266,9 +264,10 @@ async def test_list_objects(client, test_files):
             content_type=file_info["content_type"],
         )
 
-    # Some S3 services (especially OVH) have very long eventual consistency delays
-    # for list operations (30+ minutes), while objects are immediately accessible
-    # via direct operations. We'll verify the objects exist via head_object instead.
+    # Some S3 services (especially OVH) have very long eventual consistency
+    # delays for list operations (30+ minutes), while objects are immediately
+    # accessible via direct operations. We'll verify the objects exist via
+    # head_object instead.
     import asyncio
 
     # First verify all objects exist via direct access (immediate consistency)
@@ -302,25 +301,28 @@ async def test_list_objects(client, test_files):
         else:
             # Objects exist but prefix filtering might not work due to consistency
             print(
-                f"Warning: Expected 2 docs objects, got {len(docs_objects['objects'])} (eventual consistency)"
+                f"Warning: Expected 2 docs objects, got {len(docs_objects['objects'])} "
+                "(eventual consistency)"
             )
     else:
-        # Objects exist (verified by head_object) but not visible in list operations
-        # This is expected behavior for some S3 services like OVH
+        # Objects exist (verified by head_object) but not visible in list
+        # operations This is expected behavior for some S3 services like OVH
         print(
-            "Warning: Objects uploaded but not visible in list operations yet (eventual consistency)"
+            "Warning: Objects uploaded but not visible in list operations yet "
+            "(eventual consistency)"
         )
         print(
-            f"  Expected: 4 objects, Got: {len(all_objects['objects'])} (this is normal for OVH)"
+            f"  Expected: 4 objects, Got: {len(all_objects['objects'])} "
+            "(this is normal for OVH)"
         )
 
-        # Since we can't test list operations, verify the objects exist via direct access
+        # Since we can't test list operations, verify the objects exist via
+        # direct access
         assert True  # Test passes as objects were verified to exist above
 
 
 async def test_upload_file_single_part(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "upload-file/single-part.txt"
 
@@ -348,7 +350,6 @@ async def test_upload_file_single_part(client, test_files):
 
 async def test_upload_large_file_multipart(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     key = "upload-file/multipart-large.bin"
 
     # Create a large file that will trigger multipart upload
@@ -404,7 +405,6 @@ async def test_upload_large_file_multipart(client, test_files):
 async def test_delete_object(client, test_files):
     """Test deleting objects."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "temp/delete-me.txt"
 
@@ -426,7 +426,6 @@ async def test_delete_object(client, test_files):
 
 async def test_file_upload_download_cycle(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     uploaded_files = []
 
     for file_type, file_info in test_files.items():
@@ -450,7 +449,8 @@ async def test_file_upload_download_cycle(client, test_files):
     list_result = await s3_client.list_objects(prefix="cycle-test/")
     if len(list_result["objects"]) < len(test_files):
         print(
-            f"Warning: Expected {len(test_files)} objects, got {len(list_result['objects'])} (eventual consistency)"
+            f"Warning: Expected {len(test_files)} objects, "
+            f"got {len(list_result['objects'])} (eventual consistency)"
         )
 
     for key, original_file_info in uploaded_files:
@@ -475,7 +475,8 @@ async def test_file_upload_download_cycle(client, test_files):
     final_list = await s3_client.list_objects(prefix="cycle-test/")
     if len(final_list["objects"]) > 0:
         print(
-            f"Warning: {len(final_list['objects'])} objects still visible in list after deletion (eventual consistency)"
+            f"Warning: {len(final_list['objects'])} objects still visible "
+            "in list after deletion (eventual consistency)"
         )
     # Don't assert on list operations due to eventual consistency
 
@@ -483,7 +484,6 @@ async def test_file_upload_download_cycle(client, test_files):
 async def test_metadata_preservation(client, test_files):
     """Test that metadata is properly preserved through upload/download cycle."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "metadata-test/complex-metadata.txt"
 
@@ -516,7 +516,6 @@ async def test_metadata_preservation(client, test_files):
 
 async def test_error_handling(client):
     s3_client = client["client"]
-    bucket = client["bucket"]
     from s3_asyncio_client.exceptions import S3NotFoundError
 
     with pytest.raises(S3NotFoundError):
@@ -604,7 +603,6 @@ async def test_presigned_url_upload(client, test_files):
 async def test_presigned_url_with_custom_params(client, test_files):
     """Test presigned URLs with custom query parameters."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["binary"]
     key = "presigned-test/custom-params.dat"
 
@@ -645,7 +643,6 @@ async def test_presigned_url_with_custom_params(client, test_files):
 async def test_presigned_url_expiration(client, test_files):
     """Test presigned URL expiration behavior."""
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["text"]
     key = "presigned-test/expiration-test.txt"
 
@@ -675,7 +672,6 @@ async def test_presigned_url_expiration(client, test_files):
 
 async def test_presigned_url_multipart_upload(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["large"]  # 5MB file
     key = "presigned-test/large-upload.bin"
 
@@ -704,7 +700,6 @@ async def test_presigned_url_multipart_upload(client, test_files):
 
 async def test_presigned_url_binary_content(client, test_files):
     s3_client = client["client"]
-    bucket = client["bucket"]
     file_info = test_files["binary"]
     key = "presigned-test/binary-content.dat"
 
