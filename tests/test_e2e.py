@@ -20,22 +20,23 @@ async def client(request):
     aws_config_path = request.config.getoption("--aws-config")
     profile_name = request.param
 
+    bucket_name = "s3-async-client-e2e-created-test-bucket"
+    
     if aws_config_path and profile_name != "minio-default":
-        s3_client = S3Client.from_aws_config(profile_name, aws_config_path)
+        s3_client = S3Client.from_aws_config(bucket_name, profile_name, aws_config_path)
     else:
         # Default minio configuration
         s3_client = S3Client(
             access_key="minioadmin",
             secret_key="minioadmin",
             region="us-east-1",
-            endpoint_url="http://localhost:9000",
+            endpoint_url="https://s3.us-east-1.amazonaws.com",
+            bucket=bucket_name,
         )
-
-    bucket_name = "s3-async-client-e2e-created-test-bucket"
 
     async with s3_client:
         try:
-            await s3_client.create_bucket(bucket_name)
+            await s3_client.create_bucket()
         except Exception:
             # Bucket already exists, which is fine
             pass
@@ -50,11 +51,11 @@ async def client(request):
                 if continuation_token:
                     kwargs["continuation_token"] = continuation_token
 
-                result = await s3_client.list_objects(bucket_name, **kwargs)
+                result = await s3_client.list_objects(**kwargs)
 
                 for obj in result["objects"]:
                     try:
-                        await s3_client.delete_object(bucket_name, obj["key"])
+                        await s3_client.delete_object(obj["key"])
                         total_deleted += 1
                     except Exception:
                         # Ignore individual delete errors but continue
@@ -84,10 +85,10 @@ async def client(request):
                 if continuation_token:
                     kwargs["continuation_token"] = continuation_token
 
-                result = await s3_client.list_objects(bucket_name, **kwargs)
+                result = await s3_client.list_objects(**kwargs)
 
                 for obj in result["objects"]:
-                    await s3_client.delete_object(bucket_name, obj["key"])
+                    await s3_client.delete_object(obj["key"])
 
                 # Check if we need to continue
                 if not result.get("is_truncated", False):
@@ -148,7 +149,7 @@ async def test_create_bucket_fixture(client):
     s3_client = client["client"]
     bucket = client["bucket"]
 
-    result = await s3_client.list_objects(bucket)
+    result = await s3_client.list_objects()
     assert "objects" in result
     assert isinstance(result["objects"], list)
 
@@ -163,7 +164,7 @@ async def test_create_bucket_fixture(client):
 
     assert "etag" in put_result
 
-    get_result = await s3_client.get_object(bucket=bucket, key=key)
+    get_result = await s3_client.get_object(key=key)
     assert get_result["body"] == test_data
 
 
@@ -185,7 +186,7 @@ async def test_put_get_text_file(client, test_files):
     assert "etag" in result
     assert result["etag"]
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
@@ -206,7 +207,7 @@ async def test_put_get_json_file(client, test_files):
         content_type=file_info["content_type"],
     )
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
@@ -231,7 +232,7 @@ async def test_put_get_binary_file(client, test_files):
         content_type=file_info["content_type"],
     )
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
 
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
@@ -253,7 +254,7 @@ async def test_head_object(client, test_files):
         metadata={"description": "Head test file", "version": "1.0"},
     )
 
-    head_result = await s3_client.head_object(bucket=bucket, key=key)
+    head_result = await s3_client.head_object(key=key)
 
     assert head_result["content_type"] == file_info["content_type"]
     assert head_result["content_length"] == len(file_info["content"])
@@ -280,10 +281,10 @@ async def test_list_objects(client, test_files):
             content_type=file_info["content_type"],
         )
 
-    all_objects = await s3_client.list_objects(bucket=bucket)
+    all_objects = await s3_client.list_objects()
     assert len(all_objects["objects"]) == 4
 
-    docs_objects = await s3_client.list_objects(bucket=bucket, prefix="docs/")
+    docs_objects = await s3_client.list_objects(prefix="docs/")
     assert len(docs_objects["objects"]) == 2
 
     for obj in docs_objects["objects"]:
@@ -311,7 +312,7 @@ async def test_upload_file_single_part(client, test_files):
     assert result["size"] == len(file_info["content"])
     assert "etag" in result
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
     assert download_result["body"] == file_info["content"]
 
     # Note: Some S3 services may not preserve metadata consistently
@@ -367,7 +368,7 @@ async def test_upload_large_file_multipart(client, test_files):
     assert len(progress_calls) == 2
     assert sum(progress_calls) == len(large_data)
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
     assert download_result["body"] == large_data
 
     # Note: Some S3 services may not preserve metadata during multipart uploads
@@ -391,14 +392,14 @@ async def test_delete_object(client, test_files):
         content_type=file_info["content_type"],
     )
 
-    head_result = await s3_client.head_object(bucket=bucket, key=key)
+    head_result = await s3_client.head_object(key=key)
     assert head_result["content_length"] == len(file_info["content"])
 
-    delete_result = await s3_client.delete_object(bucket=bucket, key=key)
+    delete_result = await s3_client.delete_object(key=key)
     assert isinstance(delete_result, dict)
 
     with pytest.raises(S3NotFoundError):
-        await s3_client.head_object(bucket=bucket, key=key)
+        await s3_client.head_object(key=key)
 
 
 async def test_file_upload_download_cycle(client, test_files):
@@ -419,20 +420,20 @@ async def test_file_upload_download_cycle(client, test_files):
 
         uploaded_files.append((key, file_info))
 
-    list_result = await s3_client.list_objects(bucket=bucket, prefix="cycle-test/")
+    list_result = await s3_client.list_objects(prefix="cycle-test/")
     assert len(list_result["objects"]) == len(test_files)
 
     for key, original_file_info in uploaded_files:
-        download_result = await s3_client.get_object(bucket=bucket, key=key)
+        download_result = await s3_client.get_object(key=key)
 
         assert download_result["body"] == original_file_info["content"]
         assert download_result["content_type"] == original_file_info["content_type"]
         assert download_result["metadata"]["test"] == "cycle"
 
     for key, _ in uploaded_files:
-        await s3_client.delete_object(bucket=bucket, key=key)
+        await s3_client.delete_object(key=key)
 
-    final_list = await s3_client.list_objects(bucket=bucket, prefix="cycle-test/")
+    final_list = await s3_client.list_objects(prefix="cycle-test/")
     assert len(final_list["objects"]) == 0
 
 
@@ -460,11 +461,11 @@ async def test_metadata_preservation(client, test_files):
         metadata=metadata,
     )
 
-    head_result = await s3_client.head_object(bucket=bucket, key=key)
+    head_result = await s3_client.head_object(key=key)
     for key_name, value in metadata.items():
         assert head_result["metadata"][key_name] == value
 
-    get_result = await s3_client.get_object(bucket=bucket, key=key)
+    get_result = await s3_client.get_object(key=key)
     for key_name, value in metadata.items():
         assert get_result["metadata"][key_name] == value
 
@@ -477,12 +478,12 @@ async def test_error_handling(client):
     from s3_asyncio_client.exceptions import S3NotFoundError
 
     with pytest.raises(S3NotFoundError):
-        await s3_client.get_object(bucket=bucket, key="does-not-exist.txt")
+        await s3_client.get_object(key="does-not-exist.txt")
 
     with pytest.raises(S3NotFoundError):
-        await s3_client.head_object(bucket=bucket, key="does-not-exist.txt")
+        await s3_client.head_object(key="does-not-exist.txt")
 
-    result = await s3_client.delete_object(bucket=bucket, key="does-not-exist.txt")
+    result = await s3_client.delete_object(key="does-not-exist.txt")
     assert isinstance(result, dict)
 
 
@@ -558,7 +559,7 @@ async def test_presigned_url_upload(client, test_files):
         ) as response:
             assert response.status == 200
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
     assert download_result["body"] == file_info["content"]
     assert download_result["content_type"] == file_info["content_type"]
 
@@ -661,10 +662,10 @@ async def test_presigned_url_multipart_upload(client, test_files):
         ) as response:
             assert response.status == 200
 
-    head_result = await s3_client.head_object(bucket=bucket, key=key)
+    head_result = await s3_client.head_object(key=key)
     assert head_result["content_length"] == len(file_info["content"])
 
-    download_result = await s3_client.get_object(bucket=bucket, key=key)
+    download_result = await s3_client.get_object(key=key)
     assert len(download_result["body"]) == len(file_info["content"])
     assert download_result["body"][:1024] == file_info["content"][:1024]
 

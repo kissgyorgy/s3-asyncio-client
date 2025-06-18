@@ -1,11 +1,11 @@
 import configparser
 import os
 import pathlib
-import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Any
 
 import aiohttp
+from yarl import URL
 
 from .auth import AWSSignatureV4
 from .exceptions import (
@@ -15,6 +15,7 @@ from .exceptions import (
     S3NotFoundError,
     S3ServerError,
 )
+from .urlparsing import AddressStyle, get_bucket_url
 
 
 class S3Client:
@@ -22,13 +23,16 @@ class S3Client:
         self,
         access_key: str,
         secret_key: str,
-        region: str = "us-east-1",
-        endpoint_url: str | None = None,
+        region: str,
+        endpoint_url: URL | str,
+        bucket: str,
+        address_style: AddressStyle = AddressStyle.AUTO,
     ):
         self.access_key = access_key
         self.secret_key = secret_key
         self.region = region
-        self.endpoint_url = endpoint_url or f"https://s3.{region}.amazonaws.com"
+        self.endpoint_url = URL(endpoint_url)
+        self.bucket_url = get_bucket_url(self.endpoint_url, bucket, address_style)
 
         self._auth = AWSSignatureV4(access_key, secret_key, region)
         self._session: aiohttp.ClientSession | None = None
@@ -36,6 +40,7 @@ class S3Client:
     @classmethod
     def from_aws_config(
         cls,
+        bucket: str,
         profile_name: str = "default",
         config_path: str | pathlib.Path | None = None,
         credentials_path: str | pathlib.Path | None = None,
@@ -106,12 +111,7 @@ class S3Client:
         if isinstance(s3_section, dict) and "endpoint_url" in s3_section:
             endpoint_url = endpoint_url or s3_section["endpoint_url"]
 
-        return cls(
-            access_key=access_key,
-            secret_key=secret_key,
-            region=region,
-            endpoint_url=endpoint_url,
-        )
+        return cls(access_key, secret_key, region, endpoint_url, bucket)
 
     async def __aenter__(self):
         await self._ensure_session()
@@ -128,56 +128,6 @@ class S3Client:
         if self._session:
             await self._session.close()
             self._session = None
-
-    def _get_endpoint_bucket_name(self) -> str | None:
-        from urllib.parse import urlparse
-
-        parsed_url = urlparse(self.endpoint_url)
-        if parsed_url.hostname:
-            hostname_parts = parsed_url.hostname.split(".")
-            # Check if this looks like a bucket-specific endpoint
-            # (like DigitalOcean Spaces)
-            # Must have at least 3 parts and not be standard S3
-            if len(hostname_parts) >= 3 and not self.endpoint_url.startswith(
-                "https://s3."
-            ):
-                return hostname_parts[0]
-        return None
-
-    def get_effective_bucket_name(self, bucket: str) -> str:
-        endpoint_bucket = self._get_endpoint_bucket_name()
-        return endpoint_bucket if endpoint_bucket else bucket
-
-    def _build_url(self, bucket: str, key: str | None = None) -> str:
-        endpoint_bucket = self._get_endpoint_bucket_name()
-
-        if key:
-            # Virtual hosted-style URL: https://bucket.s3.region.amazonaws.com/key
-            if self.endpoint_url.startswith("https://s3."):
-                base_url = self.endpoint_url.replace("s3.", f"{bucket}.s3.")
-                return f"{base_url}/{urllib.parse.quote(key, safe='/')}"
-            else:
-                # Check if bucket name is already in the endpoint URL
-                # (like DigitalOcean Spaces)
-                if endpoint_bucket:
-                    # Use the bucket from endpoint, ignore the passed bucket parameter
-                    quoted_key = urllib.parse.quote(key, safe="/")
-                    return f"{self.endpoint_url}/{quoted_key}"
-                else:
-                    # Path-style URL for custom endpoints
-                    quoted_key = urllib.parse.quote(key, safe="/")
-                    return f"{self.endpoint_url}/{bucket}/{quoted_key}"
-        else:
-            # Bucket-only URL
-            if self.endpoint_url.startswith("https://s3."):
-                return self.endpoint_url.replace("s3.", f"{bucket}.s3.")
-            else:
-                # Check if bucket name is already in the endpoint URL
-                if endpoint_bucket:
-                    # Use the bucket from endpoint, ignore the passed bucket parameter
-                    return self.endpoint_url
-                else:
-                    return f"{self.endpoint_url}/{bucket}"
 
     def _parse_error_response(self, status: int, response_text: str) -> Exception:
         try:
@@ -206,7 +156,6 @@ class S3Client:
     async def _make_request(
         self,
         method: str,
-        bucket: str,
         key: str | None = None,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
@@ -214,7 +163,7 @@ class S3Client:
     ) -> aiohttp.ClientResponse:
         await self._ensure_session()
 
-        url = self._build_url(bucket, key)
+        url = self.bucket_url / key if key else self.endpoint_url
         request_headers = headers.copy() if headers else {}
 
         signed_headers = self._auth.sign_request(
@@ -242,7 +191,6 @@ class S3Client:
 
     async def put_object(
         self,
-        bucket: str,
         key: str,
         data: bytes,
         content_type: str | None = None,
@@ -259,13 +207,7 @@ class S3Client:
 
         headers["Content-Length"] = str(len(data))
 
-        response = await self._make_request(
-            method="PUT",
-            bucket=bucket,
-            key=key,
-            headers=headers,
-            data=data,
-        )
+        response = await self._make_request("PUT", key=key, headers=headers, data=data)
 
         result = {
             "etag": response.headers.get("ETag", "").strip('"'),
@@ -278,16 +220,8 @@ class S3Client:
         response.close()
         return result
 
-    async def get_object(
-        self,
-        bucket: str,
-        key: str,
-    ) -> dict[str, Any]:
-        response = await self._make_request(
-            method="GET",
-            bucket=bucket,
-            key=key,
-        )
+    async def get_object(self, key: str) -> dict[str, Any]:
+        response = await self._make_request("GET", key=key)
 
         body = await response.read()
         response.close()
@@ -314,17 +248,9 @@ class S3Client:
 
         return result
 
-    async def head_object(
-        self,
-        bucket: str,
-        key: str,
-    ) -> dict[str, Any]:
+    async def head_object(self, key: str) -> dict[str, Any]:
         """Get object metadata without downloading the object."""
-        response = await self._make_request(
-            method="HEAD",
-            bucket=bucket,
-            key=key,
-        )
+        response = await self._make_request("HEAD", key=key)
 
         # Extract metadata from headers (same as get_object, but no body)
         metadata = {}
@@ -349,29 +275,18 @@ class S3Client:
         response.close()
         return result
 
-    async def delete_object(
-        self,
-        bucket: str,
-        key: str,
-    ) -> dict[str, Any]:
-        response = await self._make_request(
-            method="DELETE",
-            bucket=bucket,
-            key=key,
-        )
-
+    async def delete_object(self, key: str) -> dict[str, Any]:
+        response = await self._make_request("DELETE", key=key)
         result = {
             "delete_marker": response.headers.get("x-amz-delete-marker") == "true",
             "version_id": response.headers.get("x-amz-version-id"),
         }
-
         response.close()
         return result
 
     # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
     async def create_bucket(
         self,
-        bucket: str,
         region: str | None = None,
         acl: str | None = None,
         grant_full_control: str | None = None,
@@ -450,10 +365,7 @@ class S3Client:
             headers["Content-Type"] = "application/xml"
 
         response = await self._make_request(
-            method="PUT",
-            bucket=bucket,
-            headers=headers if headers else None,
-            data=data,
+            "PUT", key=None, headers=headers if headers else None, data=data
         )
 
         result = {
@@ -463,23 +375,13 @@ class S3Client:
         response.close()
         return result
 
-    async def delete_bucket(
-        self,
-        bucket: str,
-    ) -> dict[str, Any]:
-        response = await self._make_request(
-            method="DELETE",
-            bucket=bucket,
-        )
-
-        result = {}
-
+    async def delete_bucket(self) -> dict[str, Any]:
+        response = await self._make_request("DELETE", key=None)
         response.close()
-        return result
+        return {}
 
     async def list_objects(
         self,
-        bucket: str,
         prefix: str | None = None,
         max_keys: int = 1000,
         continuation_token: str | None = None,
@@ -492,7 +394,7 @@ class S3Client:
         if prefix:
             # OVH S3 service requires leading slash in prefix
             # but returns normalized keys
-            if "ovh.net" in self.endpoint_url and not prefix.startswith("/"):
+            if "ovh.net" in str(self.bucket_url) and not prefix.startswith("/"):
                 params["prefix"] = "/" + prefix
             else:
                 params["prefix"] = prefix
@@ -500,11 +402,7 @@ class S3Client:
         if continuation_token:
             params["continuation-token"] = continuation_token
 
-        response = await self._make_request(
-            method="GET",
-            bucket=bucket,
-            params=params,
-        )
+        response = await self._make_request("GET", params=params)
 
         response_text = await response.text()
         response.close()
@@ -588,23 +486,15 @@ class S3Client:
     def generate_presigned_url(
         self,
         method: str,
-        bucket: str,
         key: str,
         expires_in: int = 3600,
         params: dict[str, str] | None = None,
     ) -> str:
-        url = self._build_url(bucket, key)
-
-        return self._auth.create_presigned_url(
-            method=method,
-            url=url,
-            expires_in=expires_in,
-            query_params=params,
-        )
+        url = URL(self.bucket_url) / key
+        return self._auth.create_presigned_url(method, url, expires_in, params)
 
     async def upload_file(
         self,
-        bucket: str,
         key: str,
         file_source,
         config=None,
@@ -622,7 +512,6 @@ class S3Client:
 
         return await upload_file(
             client=self,
-            bucket=bucket,
             key=key,
             file_source=file_source,
             config=config,

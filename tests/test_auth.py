@@ -92,7 +92,7 @@ def test_create_string_to_sign(auth):
 
 def test_sign_request(auth, mock_datetime):
     method = "GET"
-    url = "https://test-bucket.s3.amazonaws.com/test-key"
+    url = URL("https://test-bucket.s3.amazonaws.com/test-key")
     headers = {"user-agent": "test-client"}
 
     signed_headers = auth.sign_request(method, url, headers)
@@ -111,7 +111,7 @@ def test_sign_request(auth, mock_datetime):
 
 def test_sign_request_with_payload(auth, mock_datetime):
     method = "PUT"
-    url = "https://test-bucket.s3.amazonaws.com/test-key"
+    url = URL("https://test-bucket.s3.amazonaws.com/test-key")
     payload = b"test content"
 
     signed_headers = auth.sign_request(method, url, payload=payload)
@@ -122,7 +122,7 @@ def test_sign_request_with_payload(auth, mock_datetime):
 
 def test_sign_request_with_query_params(auth, mock_datetime):
     method = "GET"
-    url = "https://test-bucket.s3.amazonaws.com/test-key"
+    url = URL("https://test-bucket.s3.amazonaws.com/test-key")
     query_params = {"prefix": "test", "max-keys": "100"}
 
     signed_headers = auth.sign_request(method, url, query_params=query_params)
@@ -133,7 +133,7 @@ def test_sign_request_with_query_params(auth, mock_datetime):
 
 def test_create_presigned_url(auth, mock_datetime):
     method = "GET"
-    url = "https://test-bucket.s3.amazonaws.com/test-key"
+    url = URL("https://test-bucket.s3.amazonaws.com/test-key")
     expires_in = 3600
 
     presigned_url = auth.create_presigned_url(method, url, expires_in)
@@ -155,7 +155,7 @@ def test_create_presigned_url(auth, mock_datetime):
 
 def test_create_presigned_url_with_query_params(auth, mock_datetime):
     method = "GET"
-    url = "https://test-bucket.s3.amazonaws.com/test-key"
+    url = URL("https://test-bucket.s3.amazonaws.com/test-key")
     query_params = {"response-content-type": "text/plain"}
 
     presigned_url = auth.create_presigned_url(method, url, query_params=query_params)

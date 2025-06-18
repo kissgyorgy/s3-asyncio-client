@@ -178,7 +178,6 @@ class TestMultipartOperations:
 
         upload_id = await create_multipart_upload(
             mock_client,
-            "test-bucket",
             "test-key",
             content_type="application/octet-stream",
             metadata={"test": "value"},
@@ -199,9 +198,7 @@ class TestMultipartOperations:
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         data = b"test data"
-        result = await upload_part(
-            mock_client, "test-bucket", "test-key", "upload-id", 1, data
-        )
+        result = await upload_part(mock_client, "test-key", "upload-id", 1, data)
 
         assert result == {
             "part_number": 1,
@@ -215,12 +212,10 @@ class TestMultipartOperations:
         mock_client = MagicMock()
 
         with pytest.raises(S3ClientError, match="Part number must be between"):
-            await upload_part(mock_client, "bucket", "key", "id", 0, b"data")
+            await upload_part(mock_client, "key", "id", 0, b"data")
 
         with pytest.raises(S3ClientError, match="Part number must be between"):
-            await upload_part(
-                mock_client, "bucket", "key", "id", MAX_PARTS + 1, b"data"
-            )
+            await upload_part(mock_client, "key", "id", MAX_PARTS + 1, b"data")
 
     @pytest.mark.asyncio
     async def test_complete_multipart_upload(self):
@@ -240,7 +235,7 @@ class TestMultipartOperations:
         ]
 
         result = await complete_multipart_upload(
-            mock_client, "test-bucket", "test-key", "upload-id", parts
+            mock_client, "test-key", "upload-id", parts
         )
 
         assert result["location"] == "https://bucket.s3.amazonaws.com/key"
@@ -253,9 +248,7 @@ class TestMultipartOperations:
         mock_client = MagicMock()
 
         with pytest.raises(S3ClientError, match="No parts to complete"):
-            await complete_multipart_upload(
-                mock_client, "bucket", "key", "upload-id", []
-            )
+            await complete_multipart_upload(mock_client, "key", "upload-id", [])
 
     @pytest.mark.asyncio
     async def test_abort_multipart_upload(self):
@@ -263,9 +256,7 @@ class TestMultipartOperations:
         mock_response = AsyncMock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
-        await abort_multipart_upload(
-            mock_client, "test-bucket", "test-key", "upload-id"
-        )
+        await abort_multipart_upload(mock_client, "test-key", "upload-id")
 
         mock_client._make_request.assert_called_once()
         mock_response.close.assert_called_once()
@@ -284,9 +275,7 @@ class TestUploadFile:
 
             config = TransferConfig(multipart_threshold=1024)  # 1KB threshold
 
-            result = await upload_file(
-                mock_client, "test-bucket", "test-key", tmp.name, config
-            )
+            result = await upload_file(mock_client, "test-key", tmp.name, config)
 
             assert result["upload_type"] == "single_part"
             assert result["size"] == len(data)
@@ -323,9 +312,7 @@ class TestUploadFile:
 
                 config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
 
-                result = await upload_file(
-                    mock_client, "test-bucket", "test-key", tmp.name, config
-                )
+                result = await upload_file(mock_client, "test-key", tmp.name, config)
 
                 assert result["upload_type"] == "multipart"
                 assert result["size"] == len(data)
@@ -344,9 +331,7 @@ class TestUploadFile:
 
         config = TransferConfig(multipart_threshold=1024)  # 1KB threshold
 
-        result = await upload_file(
-            mock_client, "test-bucket", "test-key", fileobj, config
-        )
+        result = await upload_file(mock_client, "test-key", fileobj, config)
 
         assert result["upload_type"] == "single_part"
         assert result["size"] == len(data)
@@ -371,7 +356,6 @@ class TestUploadFile:
 
             await upload_file(
                 mock_client,
-                "test-bucket",
                 "test-key",
                 tmp.name,
                 config,
@@ -403,10 +387,8 @@ class TestUploadFile:
                 config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
 
                 with pytest.raises(Exception, match="Upload failed"):
-                    await upload_file(
-                        mock_client, "test-bucket", "test-key", tmp.name, config
-                    )
+                    await upload_file(mock_client, "test-key", tmp.name, config)
 
                 mock_abort.assert_called_once_with(
-                    mock_client, "test-bucket", "test-key", "test-upload-id"
+                    mock_client, "test-key", "test-upload-id"
                 )

@@ -130,7 +130,6 @@ def calculate_file_size(file_source: str | Path | Any) -> int:
 # Core multipart S3 operations
 async def create_multipart_upload(
     client,
-    bucket: str,
     key: str,
     content_type: str | None = None,
     metadata: dict[str, str] | None = None,
@@ -151,11 +150,7 @@ async def create_multipart_upload(
     params = {"uploads": ""}
 
     response = await client._make_request(
-        method="POST",
-        bucket=bucket,
-        key=key,
-        headers=headers,
-        params=params,
+        "POST", key=key, headers=headers, params=params
     )
 
     response_text = await response.text()
@@ -174,7 +169,6 @@ async def create_multipart_upload(
 
 async def upload_part(
     client,
-    bucket: str,
     key: str,
     upload_id: str,
     part_number: int,
@@ -193,14 +187,7 @@ async def upload_part(
     headers = {"Content-Length": str(len(data))}
     headers.update(extra_args)
 
-    response = await client._make_request(
-        method="PUT",
-        bucket=bucket,
-        key=key,
-        headers=headers,
-        params=params,
-        data=data,
-    )
+    response = await client._make_request("PUT", key, headers, params, data)
 
     etag = response.headers.get("ETag", "").strip('"')
     response.close()
@@ -213,12 +200,7 @@ async def upload_part(
 
 
 async def complete_multipart_upload(
-    client,
-    bucket: str,
-    key: str,
-    upload_id: str,
-    parts: list[dict[str, Any]],
-    **extra_args,
+    client, key: str, upload_id: str, parts: list[dict[str, Any]], **extra_args
 ) -> dict[str, Any]:
     if not parts:
         raise S3ClientError("No parts to complete")
@@ -246,12 +228,7 @@ async def complete_multipart_upload(
     headers.update(extra_args)
 
     response = await client._make_request(
-        method="POST",
-        bucket=bucket,
-        key=key,
-        headers=headers,
-        params=params,
-        data=xml_data.encode(),
+        "POST", key, headers, params, xml_data.encode()
     )
 
     response_text = await response.text()
@@ -264,33 +241,20 @@ async def complete_multipart_upload(
     return {
         "location": location.text if location is not None else None,
         "etag": etag.text.strip('"') if etag is not None else "",
-        "bucket": bucket,
         "key": key,
         "parts_count": len(parts_sorted),
     }
 
 
-async def abort_multipart_upload(
-    client, bucket: str, key: str, upload_id: str, **extra_args
-) -> None:
+async def abort_multipart_upload(client, key: str, upload_id: str, **extra_args):
     params = {"uploadId": upload_id}
-    headers = {}
-    headers.update(extra_args)
-
-    response = await client._make_request(
-        method="DELETE",
-        bucket=bucket,
-        key=key,
-        headers=headers,
-        params=params,
-    )
+    response = await client._make_request("DELETE", key, extra_args, params)
     response.close()
 
 
 # Main upload orchestrator
 async def upload_file(
     client,
-    bucket: str,
     key: str,
     file_source: str | Path | Any,
     config: TransferConfig | None = None,
@@ -307,7 +271,6 @@ async def upload_file(
     if not should_use_multipart(file_size, config.multipart_threshold):
         return await _upload_single_part(
             client,
-            bucket,
             key,
             file_source,
             content_type,
@@ -318,7 +281,6 @@ async def upload_file(
     else:
         return await _upload_multipart(
             client,
-            bucket,
             key,
             file_source,
             file_size,
@@ -332,7 +294,6 @@ async def upload_file(
 
 async def _upload_single_part(
     client,
-    bucket: str,
     key: str,
     file_source: str | Path | Any,
     content_type: str | None,
@@ -350,7 +311,6 @@ async def _upload_single_part(
         progress_callback(len(data))
 
     result = await client.put_object(
-        bucket=bucket,
         key=key,
         data=data,
         content_type=content_type,
@@ -360,7 +320,6 @@ async def _upload_single_part(
 
     return {
         "etag": result.get("etag", ""),
-        "bucket": bucket,
         "key": key,
         "size": len(data),
         "upload_type": "single_part",
@@ -369,7 +328,6 @@ async def _upload_single_part(
 
 async def _upload_multipart(
     client,
-    bucket: str,
     key: str,
     file_source: str | Path | Any,
     file_size: int,
@@ -382,13 +340,12 @@ async def _upload_multipart(
     part_size = adjust_chunk_size(config.multipart_chunksize, file_size)
 
     upload_id = await create_multipart_upload(
-        client, bucket, key, content_type, metadata, **extra_args
+        client, key, content_type, metadata, **extra_args
     )
 
     try:
         parts = await _upload_parts_concurrently(
             client,
-            bucket,
             key,
             upload_id,
             file_source,
@@ -399,7 +356,7 @@ async def _upload_multipart(
         )
 
         result = await complete_multipart_upload(
-            client, bucket, key, upload_id, parts, **extra_args
+            client, key, upload_id, parts, **extra_args
         )
 
         result.update(
@@ -414,7 +371,7 @@ async def _upload_multipart(
 
     except Exception:
         try:
-            await abort_multipart_upload(client, bucket, key, upload_id, **extra_args)
+            await abort_multipart_upload(client, key, upload_id, **extra_args)
         except Exception:
             pass  # Ignore abort errors
         raise
@@ -422,7 +379,6 @@ async def _upload_multipart(
 
 async def _upload_parts_concurrently(
     client,
-    bucket: str,
     key: str,
     upload_id: str,
     file_source: str | Path | Any,
@@ -448,7 +404,7 @@ async def _upload_parts_concurrently(
     async def upload_single_part(part_num: int, data: bytes) -> dict[str, Any]:
         async with semaphore:
             result = await upload_part(
-                client, bucket, key, upload_id, part_num, data, **extra_args
+                client, key, upload_id, part_num, data, **extra_args
             )
 
             if progress_callback:

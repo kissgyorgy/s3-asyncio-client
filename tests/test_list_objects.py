@@ -2,7 +2,13 @@ from s3_asyncio_client import S3Client
 
 
 async def test_list_objects_basic(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -38,19 +44,29 @@ async def test_list_objects_basic(monkeypatch):
 
     calls = []
 
-    async def mock_make_request(**kwargs):
-        calls.append(kwargs)
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
+        calls.append(
+            {
+                "method": method,
+                "key": key,
+                "headers": headers,
+                "params": params,
+                "data": data,
+            }
+        )
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.list_objects("test-bucket")
+    result = await client.list_objects()
 
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
-        "bucket": "test-bucket",
+        "key": None,
+        "headers": None,
         "params": {"list-type": "2", "max-keys": "1000"},
+        "data": None,
     }
 
     assert len(result["objects"]) == 2
@@ -68,7 +84,13 @@ async def test_list_objects_basic(monkeypatch):
 
 
 async def test_list_objects_with_prefix(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -86,18 +108,28 @@ async def test_list_objects_with_prefix(monkeypatch):
 
     calls = []
 
-    async def mock_make_request(**kwargs):
-        calls.append(kwargs)
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
+        calls.append(
+            {
+                "method": method,
+                "key": key,
+                "headers": headers,
+                "params": params,
+                "data": data,
+            }
+        )
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    await client.list_objects("test-bucket", prefix="photos/", max_keys=50)
+    await client.list_objects(prefix="photos/", max_keys=50)
 
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
-        "bucket": "test-bucket",
+        "key": None,
+        "headers": None,
+        "data": None,
         "params": {
             "list-type": "2",
             "max-keys": "50",
@@ -107,7 +139,13 @@ async def test_list_objects_with_prefix(monkeypatch):
 
 
 async def test_list_objects_with_pagination(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -132,18 +170,28 @@ async def test_list_objects_with_pagination(monkeypatch):
 
     calls = []
 
-    async def mock_make_request(**kwargs):
-        calls.append(kwargs)
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
+        calls.append(
+            {
+                "method": method,
+                "key": key,
+                "headers": headers,
+                "params": params,
+                "data": data,
+            }
+        )
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.list_objects("test-bucket", continuation_token="prev-token")
+    result = await client.list_objects(continuation_token="prev-token")
 
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
-        "bucket": "test-bucket",
+        "key": None,
+        "headers": None,
+        "data": None,
         "params": {
             "list-type": "2",
             "max-keys": "1000",
@@ -156,7 +204,13 @@ async def test_list_objects_with_pagination(monkeypatch):
 
 
 async def test_list_objects_empty(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -172,12 +226,12 @@ async def test_list_objects_empty(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.list_objects("empty-bucket")
+    result = await client.list_objects()
 
     assert len(result["objects"]) == 0
     assert result["is_truncated"] is False

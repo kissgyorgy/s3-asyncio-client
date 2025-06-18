@@ -2,7 +2,13 @@ from s3_asyncio_client import S3Client
 
 
 async def test_get_object_basic(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {
@@ -22,22 +28,31 @@ async def test_get_object_basic(monkeypatch):
 
     calls = []
 
-    async def mock_make_request(**kwargs):
-        calls.append(kwargs)
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
+        calls.append(
+            {
+                "method": method,
+                "key": key,
+                "headers": headers,
+                "params": params,
+                "data": data,
+            }
+        )
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.get_object(
-        bucket="test-bucket",
         key="test-key",
     )
 
     assert len(calls) == 1
     assert calls[0] == {
         "method": "GET",
-        "bucket": "test-bucket",
         "key": "test-key",
+        "headers": None,
+        "params": None,
+        "data": None,
     }
 
     assert result["body"] == b"Hello, World!"
@@ -51,7 +66,13 @@ async def test_get_object_basic(monkeypatch):
 
 
 async def test_get_object_with_metadata(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {
@@ -72,12 +93,12 @@ async def test_get_object_with_metadata(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.get_object("test-bucket", "test-key")
+    result = await client.get_object("test-key")
 
     assert result["metadata"]["author"] == "test-user"
     assert result["metadata"]["purpose"] == "testing"
@@ -87,7 +108,13 @@ async def test_get_object_with_metadata(monkeypatch):
 
 
 async def test_get_object_empty_content(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {
@@ -103,12 +130,12 @@ async def test_get_object_empty_content(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.get_object("test-bucket", "empty-key")
+    result = await client.get_object("empty-key")
 
     assert result["body"] == b""
     assert result["content_length"] == 0
@@ -116,7 +143,13 @@ async def test_get_object_empty_content(monkeypatch):
 
 
 async def test_get_object_binary_data(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     binary_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"  # PNG header
 
@@ -135,12 +168,12 @@ async def test_get_object_binary_data(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.get_object("test-bucket", "image.png")
+    result = await client.get_object("image.png")
 
     assert result["body"] == binary_data
     assert result["content_type"] == "image/png"
@@ -148,7 +181,13 @@ async def test_get_object_binary_data(monkeypatch):
 
 
 async def test_get_object_missing_headers(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {}
@@ -161,12 +200,12 @@ async def test_get_object_missing_headers(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.get_object("test-bucket", "minimal-key")
+    result = await client.get_object("minimal-key")
 
     assert result["body"] == b"minimal"
     assert result["content_type"] is None

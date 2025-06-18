@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import urllib.parse
 
+from yarl import URL
+
 
 class AWSSignatureV4:
     def __init__(self, access_key: str, secret_key: str, region: str = "us-east-1"):
@@ -76,27 +78,24 @@ class AWSSignatureV4:
     def sign_request(
         self,
         method: str,
-        url: str,
+        url: URL,
         headers: dict[str, str] | None = None,
         payload: bytes = b"",
         query_params: dict[str, str] | None = None,
     ) -> dict[str, str]:
+        assert url.host is not None
         if headers is None:
             headers = {}
 
         if query_params is None:
             query_params = {}
 
-        parsed_url = urllib.parse.urlparse(url)
-        host = parsed_url.netloc
-        uri = parsed_url.path or "/"
-
         now = dt.datetime.now(dt.UTC)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
         headers = headers.copy()
-        headers["host"] = host
+        headers["host"] = url.host
         headers["x-amz-date"] = timestamp
 
         if "x-amz-content-sha256" not in headers:
@@ -115,7 +114,7 @@ class AWSSignatureV4:
 
         canonical_request = self._create_canonical_request(
             method=method,
-            uri=uri,
+            uri=url.path or "/",
             query_string=query_string,
             headers=headers,
             signed_headers=signed_headers,
@@ -149,14 +148,13 @@ class AWSSignatureV4:
     def create_presigned_url(
         self,
         method: str,
-        url: str,
+        url: URL,
         expires_in: int = 3600,
         query_params: dict[str, str] | None = None,
     ) -> str:
+        assert url.host is not None
         if query_params is None:
             query_params = {}
-
-        parsed_url = urllib.parse.urlparse(url)
 
         now = dt.datetime.now(dt.UTC)
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
@@ -181,12 +179,11 @@ class AWSSignatureV4:
             ]
         )
 
-        headers = {"host": parsed_url.netloc}
         canonical_request = self._create_canonical_request(
             method=method,
-            uri=parsed_url.path or "/",
+            uri=url.path or "/",
             query_string=query_string,
-            headers=headers,
+            headers={"host": url.host},
             signed_headers="host",
             payload_hash="UNSIGNED-PAYLOAD",
         )
@@ -214,4 +211,4 @@ class AWSSignatureV4:
             ]
         )
 
-        return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{final_query_string}"
+        return str(url.with_query(final_query_string))

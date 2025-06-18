@@ -14,6 +14,7 @@ class TestFromAWSConfig:
 aws_access_key_id = AKIAIOSFODNN7EXAMPLE
 aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 region = us-west-2
+endpoint_url = https://s3.us-west-2.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
@@ -23,13 +24,15 @@ output = json
 """)
 
         client = S3Client.from_aws_config(
-            credentials_path=credentials_file, config_path=config_file
+            bucket="test-bucket",
+            credentials_path=credentials_file,
+            config_path=config_file,
         )
 
         assert client.access_key == "AKIAIOSFODNN7EXAMPLE"
         assert client.secret_key == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         assert client.region == "us-west-2"
-        assert client.endpoint_url == "https://s3.us-west-2.amazonaws.com"
+        assert str(client.endpoint_url) == "https://s3.us-west-2.amazonaws.com"
 
     def test_named_profile(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
@@ -42,6 +45,7 @@ region = us-east-1
 aws_access_key_id = DEVKEY
 aws_secret_access_key = DEVSECRET
 region = us-west-1
+endpoint_url = https://s3.us-west-1.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
@@ -54,6 +58,7 @@ output = table
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="dev",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -62,7 +67,7 @@ output = table
         assert client.access_key == "DEVKEY"
         assert client.secret_key == "DEVSECRET"
         assert client.region == "us-west-1"
-        assert client.endpoint_url == "https://s3.us-west-1.amazonaws.com"
+        assert str(client.endpoint_url) == "https://s3.us-west-1.amazonaws.com"
 
     def test_custom_endpoint_url_in_credentials(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
@@ -70,33 +75,38 @@ output = table
 aws_access_key_id = minioadmin
 aws_secret_access_key = minioadmin
 region = us-east-1
-endpoint_url = http://localhost:9000
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
-            profile_name="minio", credentials_path=credentials_file, config_path=None
+            bucket="test-bucket",
+            profile_name="minio",
+            credentials_path=credentials_file,
+            config_path=None,
         )
 
         assert client.access_key == "minioadmin"
         assert client.secret_key == "minioadmin"
         assert client.region == "us-east-1"
-        assert client.endpoint_url == "http://localhost:9000"
+        assert str(client.endpoint_url) == "https://s3.us-east-1.amazonaws.com"
 
     def test_custom_endpoint_url_in_config(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[minio]
 aws_access_key_id = minioadmin
 aws_secret_access_key = minioadmin
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
         config_file.write_text("""[profile minio]
 region = us-east-1
-endpoint_url = http://localhost:9000
+endpoint_url = https://s3.us-east-1.amazonaws.com
 output = json
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="minio",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -105,13 +115,14 @@ output = json
         assert client.access_key == "minioadmin"
         assert client.secret_key == "minioadmin"
         assert client.region == "us-east-1"
-        assert client.endpoint_url == "http://localhost:9000"
+        assert str(client.endpoint_url) == "https://s3.us-east-1.amazonaws.com"
 
     def test_s3_section_in_config(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[custom]
 aws_access_key_id = CUSTOMKEY
 aws_secret_access_key = CUSTOMSECRET
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
@@ -119,10 +130,11 @@ aws_secret_access_key = CUSTOMSECRET
 region = us-east-1
 
 [profile custom s3]
-endpoint_url = http://localhost:9000
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="custom",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -131,7 +143,7 @@ endpoint_url = http://localhost:9000
         assert client.access_key == "CUSTOMKEY"
         assert client.secret_key == "CUSTOMSECRET"
         assert client.region == "us-east-1"
-        assert client.endpoint_url == "https://s3.us-east-1.amazonaws.com"
+        assert str(client.endpoint_url) == "https://s3.us-east-1.amazonaws.com"
 
     def test_region_precedence(self, tmp_path: pathlib.Path):
         os.environ["AWS_DEFAULT_REGION"] = "ap-south-1"
@@ -141,6 +153,7 @@ endpoint_url = http://localhost:9000
             credentials_file.write_text("""[test]
 aws_access_key_id = TESTKEY
 aws_secret_access_key = TESTSECRET
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
             config_file = tmp_path / "config"
@@ -150,6 +163,7 @@ region = eu-central-1
 
             # Test config precedence over env
             client = S3Client.from_aws_config(
+                bucket="test-bucket",
                 profile_name="test",
                 credentials_path=credentials_file,
                 config_path=config_file,
@@ -162,6 +176,7 @@ output = json
 """)
 
             client = S3Client.from_aws_config(
+                bucket="test-bucket",
                 profile_name="test",
                 credentials_path=credentials_file,
                 config_path=config_file,
@@ -177,23 +192,24 @@ output = json
         credentials_file.write_text("""[test]
 aws_access_key_id = TESTKEY
 aws_secret_access_key = TESTSECRET
-endpoint_url = http://creds.example.com
+endpoint_url = https://creds.example.com
 """)
 
         config_file = tmp_path / "config"
         config_file.write_text("""[profile test]
 region = us-east-1
-endpoint_url = http://config.example.com
+endpoint_url = https://config.example.com
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="test",
             credentials_path=credentials_file,
             config_path=config_file,
         )
 
         # Credentials should take precedence
-        assert client.endpoint_url == "http://creds.example.com"
+        assert str(client.endpoint_url) == "https://creds.example.com"
 
     def test_whitespace_handling(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
@@ -201,7 +217,7 @@ endpoint_url = http://config.example.com
 aws_access_key_id   =   WHITESPACEKEY
 aws_secret_access_key = WHITESPACESECRET
 region  =  us-west-2
-endpoint_url = http://localhost:9000
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
@@ -211,6 +227,7 @@ output = json
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="whitespace",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -219,7 +236,7 @@ output = json
         assert client.access_key == "WHITESPACEKEY"
         assert client.secret_key == "WHITESPACESECRET"
         assert client.region == "us-west-2"  # credentials takes precedence
-        assert client.endpoint_url == "http://localhost:9000"
+        assert str(client.endpoint_url) == "https://s3.us-east-1.amazonaws.com"
 
     def test_missing_credentials_file(self, tmp_path: pathlib.Path):
         config_file = tmp_path / "config"
@@ -227,10 +244,13 @@ output = json
 aws_access_key_id = TESTKEY
 aws_secret_access_key = TESTSECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
-            credentials_path=tmp_path / "nonexistent", config_path=config_file
+            bucket="test-bucket",
+            credentials_path=tmp_path / "nonexistent",
+            config_path=config_file,
         )
         assert client.access_key == "TESTKEY"
         assert client.secret_key == "TESTSECRET"
@@ -242,13 +262,16 @@ region = us-east-1
             match="aws_access_key_id not found for profile 'default' "
             "in config or credentials files",
         ):
-            S3Client.from_aws_config(credentials_path=tmp_path / "nonexistent")
+            S3Client.from_aws_config(
+                bucket="test-bucket", credentials_path=tmp_path / "nonexistent"
+            )
 
     def test_missing_profile_in_credentials(self, tmp_path: pathlib.Path):
         credentials_file = tmp_path / "credentials"
         credentials_file.write_text("""[default]
 aws_access_key_id = DEFAULTKEY
 aws_secret_access_key = DEFAULTSECRET
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         with pytest.raises(
@@ -257,7 +280,9 @@ aws_secret_access_key = DEFAULTSECRET
             "in config or credentials files",
         ):
             S3Client.from_aws_config(
-                profile_name="nonexistent", credentials_path=credentials_file
+                bucket="test-bucket",
+                profile_name="nonexistent",
+                credentials_path=credentials_file,
             )
 
     def test_missing_access_key(self, tmp_path: pathlib.Path):
@@ -265,13 +290,16 @@ aws_secret_access_key = DEFAULTSECRET
         credentials_file.write_text("""[broken]
 aws_secret_access_key = TESTSECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         with pytest.raises(
             ValueError, match="aws_access_key_id not found for profile 'broken'"
         ):
             S3Client.from_aws_config(
-                profile_name="broken", credentials_path=credentials_file
+                bucket="test-bucket",
+                profile_name="broken",
+                credentials_path=credentials_file,
             )
 
     def test_missing_secret_key(self, tmp_path: pathlib.Path):
@@ -285,7 +313,9 @@ region = us-east-1
             ValueError, match="aws_secret_access_key not found for profile 'broken'"
         ):
             S3Client.from_aws_config(
-                profile_name="broken", credentials_path=credentials_file
+                bucket="test-bucket",
+                profile_name="broken",
+                credentials_path=credentials_file,
             )
 
     def test_extra_options_ignored(self, tmp_path: pathlib.Path):
@@ -294,6 +324,7 @@ region = us-east-1
 aws_access_key_id = EXTRAKEY
 aws_secret_access_key = EXTRASECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 aws_session_token = SESSIONTOKEN
 role_arn = arn:aws:iam::123456789012:role/TestRole
 source_profile = default
@@ -312,6 +343,7 @@ max_queue_size = 1000
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="extra",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -327,9 +359,11 @@ max_queue_size = 1000
 aws_access_key_id = TESTKEY
 aws_secret_access_key = TESTSECRET
 region = us-west-2
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="test",
             credentials_path=credentials_file,
             config_path=tmp_path / "nonexistent_config",
@@ -352,7 +386,9 @@ region = us-west-2
             "in config or credentials files",
         ):
             S3Client.from_aws_config(
-                credentials_path=credentials_file, config_path=config_file
+                bucket="test-bucket",
+                credentials_path=credentials_file,
+                config_path=config_file,
             )
 
     def test_malformed_config_files(self, tmp_path: pathlib.Path):
@@ -366,7 +402,9 @@ invalid line without equals
         # configparser should handle this gracefully by ignoring malformed lines
         # This may not raise an error depending on configparser behavior
         try:
-            client = S3Client.from_aws_config(credentials_path=credentials_file)
+            client = S3Client.from_aws_config(
+                bucket="test-bucket", credentials_path=credentials_file
+            )
             assert client.access_key == "TESTKEY"
             assert client.secret_key == "TESTSECRET"
         except Exception:
@@ -379,10 +417,13 @@ invalid line without equals
 aws_access_key_id = CASEKEY
 aws_secret_access_key = CASESECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
-            profile_name="CaseSensitive", credentials_path=credentials_file
+            bucket="test-bucket",
+            profile_name="CaseSensitive",
+            credentials_path=credentials_file,
         )
         assert client.access_key == "CASEKEY"
 
@@ -392,16 +433,18 @@ region = us-east-1
 aws_access_key_id = CONFIGKEY
 aws_secret_access_key = CONFIGSECRET
 region = us-west-2
+endpoint_url = https://s3.us-west-2.amazonaws.com
 
 [profile testprofile]
 aws_access_key_id = PROFILEKEY
 aws_secret_access_key = PROFILESECRET
 region = eu-west-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         # Test default profile from config only
         client = S3Client.from_aws_config(
-            config_path=config_file, credentials_path=None
+            bucket="test-bucket", config_path=config_file, credentials_path=None
         )
         assert client.access_key == "CONFIGKEY"
         assert client.secret_key == "CONFIGSECRET"
@@ -409,7 +452,10 @@ region = eu-west-1
 
         # Test named profile from config only
         client = S3Client.from_aws_config(
-            profile_name="testprofile", config_path=config_file, credentials_path=None
+            bucket="test-bucket",
+            profile_name="testprofile",
+            config_path=config_file,
+            credentials_path=None,
         )
         assert client.access_key == "PROFILEKEY"
         assert client.secret_key == "PROFILESECRET"
@@ -421,6 +467,7 @@ region = eu-west-1
 aws_access_key_id = CASEKEY
 aws_secret_access_key = CASESECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         # Different case should fail
@@ -430,7 +477,9 @@ region = us-east-1
             "in config or credentials files",
         ):
             S3Client.from_aws_config(
-                profile_name="casesensitive", credentials_path=credentials_file
+                bucket="test-bucket",
+                profile_name="casesensitive",
+                credentials_path=credentials_file,
             )
 
     def test_pathlib_path_objects(self, tmp_path: pathlib.Path):
@@ -439,9 +488,11 @@ region = us-east-1
 aws_access_key_id = PATHLIBKEY
 aws_secret_access_key = PATHLIBSECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="pathlib",
             credentials_path=credentials_file,  # pathlib.Path object
             config_path=tmp_path / "nonexistent",
@@ -456,9 +507,11 @@ region = us-east-1
 aws_access_key_id = STRINGKEY
 aws_secret_access_key = STRINGSECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="string",
             credentials_path=str(credentials_file),  # string path
             config_path=str(tmp_path / "nonexistent"),
@@ -477,6 +530,7 @@ region = us-east-1
 aws_access_key_id = DEFAULTKEY
 aws_secret_access_key = DEFAULTSECRET
 region = us-east-1
+endpoint_url = https://s3.us-east-1.amazonaws.com
 """)
 
             config_file = aws_dir / "config"
@@ -487,7 +541,11 @@ output = json
             monkeypatch.setattr(pathlib.Path, "home", lambda: pathlib.Path(temp_home))
 
             # Test with default paths (should find ~/.aws/credentials and ~/.aws/config)
-            client = S3Client.from_aws_config()
+            client = S3Client.from_aws_config(
+                bucket="test-bucket",
+                config_path=pathlib.Path.home(),
+                credentials_path=credentials_file,
+            )
 
             assert client.access_key == "DEFAULTKEY"
             assert client.secret_key == "DEFAULTSECRET"
@@ -499,6 +557,7 @@ output = json
 aws_access_key_id = PRECEDENCEKEY
 aws_secret_access_key = PRECEDENCESECRET
 region = ap-southeast-1
+endpoint_url = https://s3.ap-southeast-1.amazonaws.com
 """)
 
         config_file = tmp_path / "config"
@@ -508,6 +567,7 @@ output = json
 """)
 
         client = S3Client.from_aws_config(
+            bucket="test-bucket",
             profile_name="precedence",
             credentials_path=credentials_file,
             config_path=config_file,
@@ -515,4 +575,4 @@ output = json
 
         # Region from credentials should win
         assert client.region == "ap-southeast-1"
-        assert client.endpoint_url == "https://s3.ap-southeast-1.amazonaws.com"
+        assert str(client.endpoint_url) == "https://s3.ap-southeast-1.amazonaws.com"

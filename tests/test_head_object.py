@@ -2,7 +2,13 @@ from s3_asyncio_client import S3Client
 
 
 async def test_head_object_basic(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {
@@ -19,22 +25,31 @@ async def test_head_object_basic(monkeypatch):
 
     calls = []
 
-    async def mock_make_request(**kwargs):
-        calls.append(kwargs)
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
+        calls.append(
+            {
+                "method": method,
+                "key": key,
+                "headers": headers,
+                "params": params,
+                "data": data,
+            }
+        )
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
     result = await client.head_object(
-        bucket="test-bucket",
         key="test-key",
     )
 
     assert len(calls) == 1
     assert calls[0] == {
         "method": "HEAD",
-        "bucket": "test-bucket",
         "key": "test-key",
+        "headers": None,
+        "params": None,
+        "data": None,
     }
 
     assert result["content_type"] == "text/plain"
@@ -48,7 +63,13 @@ async def test_head_object_basic(monkeypatch):
 
 
 async def test_head_object_with_metadata(monkeypatch):
-    client = S3Client("test-key", "test-secret", "us-east-1")
+    client = S3Client(
+        access_key="test-key",
+        secret_key="test-secret",
+        region="us-east-1",
+        endpoint_url="https://s3.us-east-1.amazonaws.com",
+        bucket="test-bucket",
+    )
 
     class MockResponse:
         headers = {
@@ -66,12 +87,12 @@ async def test_head_object_with_metadata(monkeypatch):
 
     mock_response = MockResponse()
 
-    async def mock_make_request(**kwargs):
+    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
         return mock_response
 
     monkeypatch.setattr(client, "_make_request", mock_make_request)
 
-    result = await client.head_object("test-bucket", "test-key")
+    result = await client.head_object("test-key")
 
     assert result["metadata"]["author"] == "test-user"
     assert result["metadata"]["purpose"] == "testing"
