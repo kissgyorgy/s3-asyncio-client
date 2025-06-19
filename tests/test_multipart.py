@@ -1,7 +1,7 @@
 import tempfile
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -155,6 +155,7 @@ class TestMultipartOperations:
             <UploadId>test-upload-id</UploadId>
         </InitiateMultipartUploadResult>
         """
+        mock_response.close = Mock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         upload_id = await create_multipart_upload(
@@ -174,6 +175,7 @@ class TestMultipartOperations:
             <UploadId>test-upload-id</UploadId>
         </InitiateMultipartUploadResult>
         """
+        mock_response.close = Mock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         upload_id = await create_multipart_upload(
@@ -195,6 +197,7 @@ class TestMultipartOperations:
         mock_client = MagicMock()
         mock_response = AsyncMock()
         mock_response.headers = {"ETag": '"test-etag"'}
+        mock_response.close = Mock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         data = b"test data"
@@ -227,6 +230,7 @@ class TestMultipartOperations:
             <ETag>"final-etag"</ETag>
         </CompleteMultipartUploadResult>
         """
+        mock_response.close = Mock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         parts = [
@@ -254,6 +258,7 @@ class TestMultipartOperations:
     async def test_abort_multipart_upload(self):
         mock_client = MagicMock()
         mock_response = AsyncMock()
+        mock_response.close = Mock()
         mock_client._make_request = AsyncMock(return_value=mock_response)
 
         await abort_multipart_upload(mock_client, "test-key", "upload-id")
