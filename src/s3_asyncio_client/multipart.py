@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .base import _S3ClientBase
 from .exceptions import S3ClientError
 
 # constants based on s3transfer
@@ -127,297 +128,297 @@ def calculate_file_size(file_source: str | Path | Any) -> int:
         )
 
 
-# Core multipart S3 operations
-async def create_multipart_upload(
-    client,
-    key: str,
-    content_type: str | None = None,
-    metadata: dict[str, str] | None = None,
-    **extra_args,
-) -> str:
-    """Create a multipart upload and return the upload ID."""
-    headers = {}
-
-    if content_type:
-        headers["Content-Type"] = content_type
-
-    if metadata:
-        for key_name, value in metadata.items():
-            headers[f"x-amz-meta-{key_name}"] = value
-
-    headers.update(extra_args)
-
-    params = {"uploads": ""}
-
-    response = await client._make_request(
-        "POST", key=key, headers=headers, params=params
-    )
-
-    response_text = await response.text()
-    response.close()
-    root = ET.fromstring(response_text)
-
-    # Try to find UploadId with namespace first, then without
-    upload_id_elem = root.find(".//{http://s3.amazonaws.com/doc/2006-03-01/}UploadId")
-    if upload_id_elem is None:
-        upload_id_elem = root.find(".//UploadId")
-    if upload_id_elem is None:
-        raise S3ClientError("No UploadId in response")
-
-    return upload_id_elem.text
-
-
-async def upload_part(
-    client,
-    key: str,
-    upload_id: str,
-    part_number: int,
-    data: bytes,
-    **extra_args,
-) -> dict[str, Any]:
-    """Upload a single part of a multipart upload."""
-    if part_number < 1 or part_number > MAX_PARTS:
-        raise S3ClientError(f"Part number must be between 1 and {MAX_PARTS}")
-
-    params = {
-        "partNumber": str(part_number),
-        "uploadId": upload_id,
-    }
-
-    headers = {"Content-Length": str(len(data))}
-    headers.update(extra_args)
-
-    response = await client._make_request("PUT", key, headers, params, data)
-
-    etag = response.headers.get("ETag", "").strip('"')
-    response.close()
-
-    return {
-        "part_number": part_number,
-        "etag": etag,
-        "size": len(data),
-    }
-
-
-async def complete_multipart_upload(
-    client, key: str, upload_id: str, parts: list[dict[str, Any]], **extra_args
-) -> dict[str, Any]:
-    if not parts:
-        raise S3ClientError("No parts to complete")
-
-    parts_sorted = sorted(parts, key=lambda x: x["part_number"])
-
-    parts_xml = []
-    for part in parts_sorted:
-        parts_xml.append(
-            f"<Part>"
-            f"<PartNumber>{part['part_number']}</PartNumber>"
-            f'<ETag>"{part["etag"]}"</ETag>'
-            f"</Part>"
-        )
-
-    xml_data = (
-        "<CompleteMultipartUpload>" + "".join(parts_xml) + "</CompleteMultipartUpload>"
-    )
-
-    params = {"uploadId": upload_id}
-    headers = {
-        "Content-Type": "application/xml",
-        "Content-Length": str(len(xml_data.encode())),
-    }
-    headers.update(extra_args)
-
-    response = await client._make_request(
-        "POST", key, headers, params, xml_data.encode()
-    )
-
-    response_text = await response.text()
-    response.close()
-    root = ET.fromstring(response_text)
-
-    location = root.find("Location")
-    etag = root.find("ETag")
-
-    return {
-        "location": location.text if location is not None else None,
-        "etag": etag.text.strip('"') if etag is not None else "",
-        "key": key,
-        "parts_count": len(parts_sorted),
-    }
-
-
-async def abort_multipart_upload(client, key: str, upload_id: str, **extra_args):
-    params = {"uploadId": upload_id}
-    response = await client._make_request("DELETE", key, extra_args, params)
-    response.close()
-
-
-# Main upload orchestrator
-async def upload_file(
-    client,
-    key: str,
-    file_source: str | Path | Any,
-    config: TransferConfig | None = None,
-    content_type: str | None = None,
-    metadata: dict[str, str] | None = None,
-    progress_callback: Callable | None = None,
-    **extra_args,
-) -> dict[str, Any]:
-    if config is None:
-        config = TransferConfig()
-
-    file_size = calculate_file_size(file_source)
-
-    if not should_use_multipart(file_size, config.multipart_threshold):
-        return await _upload_single_part(
-            client,
-            key,
-            file_source,
-            content_type,
-            metadata,
-            progress_callback,
-            **extra_args,
-        )
-    else:
-        return await _upload_multipart(
-            client,
-            key,
-            file_source,
-            file_size,
-            config,
-            content_type,
-            metadata,
-            progress_callback,
-            **extra_args,
-        )
-
-
-async def _upload_single_part(
-    client,
-    key: str,
-    file_source: str | Path | Any,
-    content_type: str | None,
-    metadata: dict[str, str] | None,
-    progress_callback: Callable | None,
-    **extra_args,
-) -> dict[str, Any]:
-    if isinstance(file_source, str | Path):
-        with open(file_source, "rb") as f:
-            data = f.read()
-    else:
-        data = file_source.read()
-
-    if progress_callback:
-        progress_callback(len(data))
-
-    result = await client.put_object(
-        key=key,
-        data=data,
-        content_type=content_type,
-        metadata=metadata,
+class _MultipartOperations(_S3ClientBase):
+    async def create_multipart_upload(
+        self,
+        key: str,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
         **extra_args,
-    )
+    ) -> str:
+        """Create a multipart upload and return the upload ID."""
+        headers = {}
 
-    return {
-        "etag": result.get("etag", ""),
-        "key": key,
-        "size": len(data),
-        "upload_type": "single_part",
-    }
+        if content_type:
+            headers["Content-Type"] = content_type
 
+        if metadata:
+            for key_name, value in metadata.items():
+                headers[f"x-amz-meta-{key_name}"] = value
 
-async def _upload_multipart(
-    client,
-    key: str,
-    file_source: str | Path | Any,
-    file_size: int,
-    config: TransferConfig,
-    content_type: str | None,
-    metadata: dict[str, str] | None,
-    progress_callback: Callable | None,
-    **extra_args,
-) -> dict[str, Any]:
-    part_size = adjust_chunk_size(config.multipart_chunksize, file_size)
+        headers.update(extra_args)
 
-    upload_id = await create_multipart_upload(
-        client, key, content_type, metadata, **extra_args
-    )
+        params = {"uploads": ""}
 
-    try:
-        parts = await _upload_parts_concurrently(
-            client,
-            key,
-            upload_id,
-            file_source,
-            part_size,
-            config.max_concurrency,
-            progress_callback,
-            **extra_args,
+        response = await self._make_request(
+            "POST", key=key, headers=headers, params=params
         )
 
-        result = await complete_multipart_upload(
-            client, key, upload_id, parts, **extra_args
+        response_text = await response.text()
+        response.close()
+        root = ET.fromstring(response_text)
+
+        # Try to find UploadId with namespace first, then without
+        upload_id_elem = root.find(
+            ".//{http://s3.amazonaws.com/doc/2006-03-01/}UploadId"
         )
+        if upload_id_elem is None:
+            upload_id_elem = root.find(".//UploadId")
+        if upload_id_elem is None:
+            raise S3ClientError("No UploadId in response")
 
-        result.update(
-            {
-                "size": file_size,
-                "upload_type": "multipart",
-                "part_size": part_size,
-            }
-        )
+        return upload_id_elem.text
 
-        return result
+    async def upload_part(
+        self,
+        key: str,
+        upload_id: str,
+        part_number: int,
+        data: bytes,
+        **extra_args,
+    ) -> dict[str, Any]:
+        """Upload a single part of a multipart upload."""
+        if part_number < 1 or part_number > MAX_PARTS:
+            raise S3ClientError(f"Part number must be between 1 and {MAX_PARTS}")
 
-    except Exception:
-        try:
-            await abort_multipart_upload(client, key, upload_id, **extra_args)
-        except Exception:
-            pass  # Ignore abort errors
-        raise
+        params = {
+            "partNumber": str(part_number),
+            "uploadId": upload_id,
+        }
 
+        headers = {"Content-Length": str(len(data))}
+        headers.update(extra_args)
 
-async def _upload_parts_concurrently(
-    client,
-    key: str,
-    upload_id: str,
-    file_source: str | Path | Any,
-    part_size: int,
-    max_concurrency: int,
-    progress_callback: Callable | None,
-    **extra_args,
-) -> list[dict[str, Any]]:
-    if isinstance(file_source, str | Path):
-        chunk_generator = read_file_chunks(file_source, part_size)
-    else:
-        chunk_generator = read_fileobj_chunks(file_source, part_size)
+        response = await self._make_request("PUT", key, headers, params, data)
 
-    chunks = []
-    part_number = 1
+        etag = response.headers.get("ETag", "").strip('"')
+        response.close()
 
-    async for chunk in chunk_generator:
-        chunks.append((part_number, chunk))
-        part_number += 1
+        return {
+            "part_number": part_number,
+            "etag": etag,
+            "size": len(data),
+        }
 
-    semaphore = asyncio.Semaphore(max_concurrency)
+    async def complete_multipart_upload(
+        self, key: str, upload_id: str, parts: list[dict[str, Any]], **extra_args
+    ) -> dict[str, Any]:
+        if not parts:
+            raise S3ClientError("No parts to complete")
 
-    async def upload_single_part(part_num: int, data: bytes) -> dict[str, Any]:
-        async with semaphore:
-            result = await upload_part(
-                client, key, upload_id, part_num, data, **extra_args
+        parts_sorted = sorted(parts, key=lambda x: x["part_number"])
+
+        parts_xml = []
+        for part in parts_sorted:
+            parts_xml.append(
+                f"<Part>"
+                f"<PartNumber>{part['part_number']}</PartNumber>"
+                f'<ETag>"{part["etag"]}"</ETag>'
+                f"</Part>"
             )
 
-            if progress_callback:
-                progress_callback(len(data))
+        xml_data = (
+            "<CompleteMultipartUpload>"
+            + "".join(parts_xml)
+            + "</CompleteMultipartUpload>"
+        )
+
+        params = {"uploadId": upload_id}
+        headers = {
+            "Content-Type": "application/xml",
+            "Content-Length": str(len(xml_data.encode())),
+        }
+        headers.update(extra_args)
+
+        response = await self._make_request(
+            "POST", key, headers, params, xml_data.encode()
+        )
+
+        response_text = await response.text()
+        response.close()
+        root = ET.fromstring(response_text)
+
+        location = root.find("Location")
+        etag = root.find("ETag")
+
+        return {
+            "location": location.text if location is not None else None,
+            "etag": etag.text.strip('"') if etag is not None else "",
+            "key": key,
+            "parts_count": len(parts_sorted),
+        }
+
+    async def abort_multipart_upload(self, key: str, upload_id: str, **extra_args):
+        params = {"uploadId": upload_id}
+        response = await self._make_request("DELETE", key, extra_args, params)
+        response.close()
+
+    # Main upload orchestrator
+    async def upload_file(
+        self,
+        key: str,
+        file_source: str | Path | Any,
+        config: TransferConfig | None = None,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+        progress_callback: Callable | None = None,
+        **extra_args,
+    ) -> dict[str, Any]:
+        """Upload a file using automatic single-part or multipart upload.
+
+        Automatically determines whether to use multipart upload based on file size.
+        For large files, uses concurrent multipart upload for better performance.
+        """
+
+        if config is None:
+            config = TransferConfig()
+
+        file_size = calculate_file_size(file_source)
+
+        if not should_use_multipart(file_size, config.multipart_threshold):
+            return await self._upload_single_part(
+                key,
+                file_source,
+                content_type,
+                metadata,
+                progress_callback,
+                **extra_args,
+            )
+        else:
+            return await self._upload_multipart(
+                key,
+                file_source,
+                file_size,
+                config,
+                content_type,
+                metadata,
+                progress_callback,
+                **extra_args,
+            )
+
+    async def _upload_single_part(
+        self,
+        key: str,
+        file_source: str | Path | Any,
+        content_type: str | None,
+        metadata: dict[str, str] | None,
+        progress_callback: Callable | None,
+        **extra_args,
+    ) -> dict[str, Any]:
+        if isinstance(file_source, str | Path):
+            with open(file_source, "rb") as f:
+                data = f.read()
+        else:
+            data = file_source.read()
+
+        if progress_callback:
+            progress_callback(len(data))
+
+        result = await self.put_object(
+            key=key,
+            data=data,
+            content_type=content_type,
+            metadata=metadata,
+            **extra_args,
+        )
+
+        return {
+            "etag": result.get("etag", ""),
+            "key": key,
+            "size": len(data),
+            "upload_type": "single_part",
+        }
+
+    async def _upload_multipart(
+        self,
+        key: str,
+        file_source: str | Path | Any,
+        file_size: int,
+        config: TransferConfig,
+        content_type: str | None,
+        metadata: dict[str, str] | None,
+        progress_callback: Callable | None,
+        **extra_args,
+    ) -> dict[str, Any]:
+        part_size = adjust_chunk_size(config.multipart_chunksize, file_size)
+
+        upload_id = await self.create_multipart_upload(
+            key, content_type, metadata, **extra_args
+        )
+
+        try:
+            parts = await self._upload_parts_concurrently(
+                key,
+                upload_id,
+                file_source,
+                part_size,
+                config.max_concurrency,
+                progress_callback,
+                **extra_args,
+            )
+
+            result = await self.complete_multipart_upload(
+                key, upload_id, parts, **extra_args
+            )
+
+            result.update(
+                {
+                    "size": file_size,
+                    "upload_type": "multipart",
+                    "part_size": part_size,
+                }
+            )
 
             return result
 
-    async with asyncio.TaskGroup() as tg:
-        tasks = [
-            tg.create_task(upload_single_part(part_num, data))
-            for part_num, data in chunks
-        ]
+        except Exception:
+            try:
+                await self.abort_multipart_upload(key, upload_id, **extra_args)
+            except Exception:
+                pass  # Ignore abort errors
+            raise
 
-    parts = [task.result() for task in tasks]
+    async def _upload_parts_concurrently(
+        self,
+        key: str,
+        upload_id: str,
+        file_source: str | Path | Any,
+        part_size: int,
+        max_concurrency: int,
+        progress_callback: Callable | None,
+        **extra_args,
+    ) -> list[dict[str, Any]]:
+        if isinstance(file_source, str | Path):
+            chunk_generator = read_file_chunks(file_source, part_size)
+        else:
+            chunk_generator = read_fileobj_chunks(file_source, part_size)
 
-    return parts
+        chunks = []
+        part_number = 1
+
+        async for chunk in chunk_generator:
+            chunks.append((part_number, chunk))
+            part_number += 1
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def upload_single_part(part_num: int, data: bytes) -> dict[str, Any]:
+            async with semaphore:
+                result = await self.upload_part(
+                    key, upload_id, part_num, data, **extra_args
+                )
+
+                if progress_callback:
+                    progress_callback(len(data))
+
+                return result
+
+        async with asyncio.TaskGroup() as tg:
+            tasks = [
+                tg.create_task(upload_single_part(part_num, data))
+                for part_num, data in chunks
+            ]
+
+        parts = [task.result() for task in tasks]
+
+        return parts

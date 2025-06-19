@@ -21,14 +21,13 @@ ruff format              # Format code
 ruff check --fix         # Auto-fix linting issues
 
 # Documentation
-mkdocs serve                    # Local documentation server
 mkdocs build                    # Build documentation
 ```
 
 ### Testing with Minio (S3-compatible service)
 ```bash
 # Start local minio server for integration testing
-minio server /tmp/minio-data --console-address :9001
+minio server tmp/minio-data --console-address :9001
 # Default credentials: minioadmin/minioadmin
 # Console: http://localhost:9001, API: http://localhost:9000
 ```
@@ -37,13 +36,15 @@ minio server /tmp/minio-data --console-address :9001
 
 ### Core Components
 - **S3Client** (`client.py`): Main async client with context manager pattern, single aiohttp session
+- **_MultipartOperations** (`multipart.py`): Handling multipart upload logic
+- **_ObjectOperations** (`objects.py`): Handling object-related operations like put, get, delete
+- **_BucketOperations** (`buckets.py`): Handling bucket-related operations like create bucket, list objects
 - **AWSSignatureV4** (`auth.py`): Complete AWS Signature V4 implementation for authentication
 - **Exception Hierarchy** (`exceptions.py`): Structured S3Error -> S3ClientError/S3ServerError
 
 ### Key Design Patterns
 - **Async Context Manager**: All operations through `async with S3Client(...) as client:`
 - **Unified Request Interface**: All operations via `_make_request()` with automatic signing and error handling
-- **Builder Pattern**: `_build_url()` handles AWS S3 vs S3-compatible service URL differences
 
 ### Authentication Flow
 1. Canonical request creation (normalize HTTP components)
@@ -54,23 +55,15 @@ minio server /tmp/minio-data --console-address :9001
 ### Error Handling Strategy
 - Parse XML error responses from S3 into structured exceptions
 - Status code precedence over error codes for classification
-- Specific exception types: S3NotFoundError (404), S3AccessDeniedError (403), S3InvalidRequestError (400)
+- Specific exception types: `S3NotFoundError` (404), `S3AccessDeniedError` (403), `S3InvalidRequestError` (400)
 
 ## Testing Architecture
 
 ### Test Categories
-- **Unit Tests**: Mock `_make_request()` to test logic without network calls
-- **Integration Tests**: Use moto library to mock AWS S3 service
+- **Unit Tests**: `mock_client` pytest fixture mock `_make_request()` to test logic without network calls
 - **Authentication Tests**: Mock datetime for predictable signature generation
 
-### Test Patterns
-```python
-# Integration test pattern  
-@mock_s3
-async def test_with_moto():
-    # Real S3 operations against moto mock
-```
-
+### Testing
 - Never start required services like minio; always assume they are running.
   Ask the user to start them if not running.
 
@@ -80,7 +73,6 @@ async def test_with_moto():
 - **AWS S3**: Virtual hosted-style (`https://bucket.s3.region.amazonaws.com/key`)
 - **S3-Compatible**: Path-style (`https://endpoint.com/bucket/key`)
 - Automatic URL encoding for special characters
-
 
 ### Response Handling
 - Extract metadata from `x-amz-meta-*` headers
@@ -92,8 +84,7 @@ async def test_with_moto():
 ### When Adding New Operations
 - Follow async/await pattern throughout
 - Use `_make_request()` for all HTTP operations
-- Implement both unit tests (mocked) and integration tests (moto)
-- Add comprehensive docstrings with parameter and return type documentation
+- Implement both unit tests (`mock_client`) and integration tests
 
 ### Error Handling Requirements  
 - Always parse S3 XML error responses

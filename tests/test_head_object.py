@@ -1,50 +1,21 @@
-from s3_asyncio_client import S3Client
+import pytest
 
 
-async def test_head_object_basic(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
-    class MockResponse:
-        headers = {
+@pytest.mark.asyncio
+async def test_head_object_basic(mock_client):
+    mock_client.add_response(
+        "",
+        headers={
             "Content-Type": "text/plain",
             "Content-Length": "13",
             "ETag": '"abc123"',
             "Last-Modified": "Wed, 12 Oct 2023 17:50:00 GMT",
-        }
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.head_object(
-        key="test-key",
+        },
     )
+    result = await mock_client.head_object(key="test-key")
 
-    assert len(calls) == 1
-    assert calls[0] == {
+    assert len(mock_client.requests) == 1
+    assert mock_client.requests[0] == {
         "method": "HEAD",
         "key": "test-key",
         "headers": None,
@@ -62,17 +33,11 @@ async def test_head_object_basic(monkeypatch):
     assert "body" not in result  # HEAD doesn't include body
 
 
-async def test_head_object_with_metadata(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
-    class MockResponse:
-        headers = {
+@pytest.mark.asyncio
+async def test_head_object_with_metadata(mock_client):
+    mock_client.add_response(
+        "m" * 25,
+        headers={
             "Content-Type": "application/json",
             "Content-Length": "25",
             "ETag": '"def456"',
@@ -80,19 +45,9 @@ async def test_head_object_with_metadata(monkeypatch):
             "x-amz-meta-purpose": "testing",
             "x-amz-version-id": "version123",
             "x-amz-server-side-encryption": "AES256",
-        }
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.head_object("test-key")
+        },
+    )
+    result = await mock_client.head_object("test-key")
 
     assert result["metadata"]["author"] == "test-user"
     assert result["metadata"]["purpose"] == "testing"

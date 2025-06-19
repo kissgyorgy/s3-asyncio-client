@@ -1,7 +1,6 @@
 import tempfile
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -12,16 +11,11 @@ from s3_asyncio_client.multipart import (
     MAX_PARTS,
     MIN_PART_SIZE,
     TransferConfig,
-    abort_multipart_upload,
     adjust_chunk_size,
     calculate_file_size,
-    complete_multipart_upload,
-    create_multipart_upload,
     read_file_chunks,
     read_fileobj_chunks,
     should_use_multipart,
-    upload_file,
-    upload_part,
 )
 
 
@@ -44,22 +38,19 @@ class TestTransferConfig:
 
 
 class TestUploadDecision:
-    def test_should_use_multipart_true(self):
-        # File larger than threshold should use multipart
+    def test_larger_than_threshold_should_use_multipart(self):
         assert should_use_multipart(10 * 1024 * 1024, 8 * 1024 * 1024) is True
 
-    def test_should_use_multipart_false(self):
-        # File smaller than threshold should use single-part
+    def test_smaller_than_threshold_use_single_part(self):
         assert should_use_multipart(5 * 1024 * 1024, 8 * 1024 * 1024) is False
 
-    def test_should_use_multipart_exact_threshold(self):
-        # File equal to threshold should use single-part
+    def test_exact_threshold_should_use_single_part(self):
         assert should_use_multipart(8 * 1024 * 1024, 8 * 1024 * 1024) is False
 
 
 class TestChunkSizeAdjustment:
     def test_adjust_chunk_size_within_limits_remains_unchanged(self):
-        chunksize = 8 * 1024 * 1024  # 8MB
+        chunksize = 8 * 1024 * 1024
         assert adjust_chunk_size(chunksize) == chunksize
 
     def test_adjust_chunk_size_too_small_should_be_increased(self):
@@ -147,39 +138,23 @@ class TestFileReading:
 
 class TestMultipartOperations:
     @pytest.mark.asyncio
-    async def test_create_multipart_upload(self):
-        mock_client = MagicMock()
-        mock_response = AsyncMock()
-        mock_response.text.return_value = """
-        <InitiateMultipartUploadResult>
-            <UploadId>test-upload-id</UploadId>
-        </InitiateMultipartUploadResult>
-        """
-        mock_response.close = Mock()
-        mock_client._make_request = AsyncMock(return_value=mock_response)
-
-        upload_id = await create_multipart_upload(
-            mock_client, "test-bucket", "test-key"
-        )
-
+    async def test_create_multipart_upload(self, mock_client):
+        mock_client.add_response("""
+            <InitiateMultipartUploadResult>
+                <UploadId>test-upload-id</UploadId>
+            </InitiateMultipartUploadResult>
+        """)
+        upload_id = await mock_client.create_multipart_upload("test-bucket", "test-key")
         assert upload_id == "test-upload-id"
-        mock_client._make_request.assert_called_once()
-        mock_response.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_multipart_upload_with_metadata(self):
-        mock_client = MagicMock()
-        mock_response = AsyncMock()
-        mock_response.text.return_value = """
+    async def test_create_multipart_upload_with_metadata(self, mock_client):
+        mock_client.add_response("""
         <InitiateMultipartUploadResult>
             <UploadId>test-upload-id</UploadId>
         </InitiateMultipartUploadResult>
-        """
-        mock_response.close = Mock()
-        mock_client._make_request = AsyncMock(return_value=mock_response)
-
-        upload_id = await create_multipart_upload(
-            mock_client,
+        """)
+        upload_id = await mock_client.create_multipart_upload(
             "test-key",
             content_type="application/octet-stream",
             metadata={"test": "value"},
@@ -187,165 +162,167 @@ class TestMultipartOperations:
 
         assert upload_id == "test-upload-id"
 
-        call_args = mock_client._make_request.call_args
-        headers = call_args[1]["headers"]
+        headers = mock_client.requests[0]["headers"]
         assert headers["Content-Type"] == "application/octet-stream"
         assert headers["x-amz-meta-test"] == "value"
 
     @pytest.mark.asyncio
-    async def test_upload_part(self):
-        mock_client = MagicMock()
-        mock_response = AsyncMock()
-        mock_response.headers = {"ETag": '"test-etag"'}
-        mock_response.close = Mock()
-        mock_client._make_request = AsyncMock(return_value=mock_response)
+    async def test_upload_part(self, mock_client):
+        class MockResponse:
+            headers = {"ETag": '"test-etag"'}
+
+            def close(self):
+                pass
+
+        async def mock_make_request_with_response(
+            method, key=None, headers=None, params=None, data=None
+        ):
+            return MockResponse()
+
+        mock_client._make_request = mock_make_request_with_response
 
         data = b"test data"
-        result = await upload_part(mock_client, "test-key", "upload-id", 1, data)
+        result = await mock_client.upload_part("test-key", "upload-id", 1, data)
 
         assert result == {
             "part_number": 1,
             "etag": "test-etag",
             "size": len(data),
         }
-        mock_response.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upload_part_invalid_number(self):
-        mock_client = MagicMock()
+    async def test_upload_part_invalid_number(self, mock_client):
+        with pytest.raises(S3ClientError, match="Part number must be between"):
+            await mock_client.upload_part("key", "id", 0, b"data")
 
         with pytest.raises(S3ClientError, match="Part number must be between"):
-            await upload_part(mock_client, "key", "id", 0, b"data")
-
-        with pytest.raises(S3ClientError, match="Part number must be between"):
-            await upload_part(mock_client, "key", "id", MAX_PARTS + 1, b"data")
+            await mock_client.upload_part("key", "id", MAX_PARTS + 1, b"data")
 
     @pytest.mark.asyncio
-    async def test_complete_multipart_upload(self):
-        mock_client = MagicMock()
-        mock_response = AsyncMock()
-        mock_response.text.return_value = """
+    async def test_complete_multipart_upload(self, mock_client):
+        xml_response = """
         <CompleteMultipartUploadResult>
             <Location>https://bucket.s3.amazonaws.com/key</Location>
             <ETag>"final-etag"</ETag>
         </CompleteMultipartUploadResult>
         """
-        mock_response.close = Mock()
-        mock_client._make_request = AsyncMock(return_value=mock_response)
+        mock_client.add_response(xml_response)
 
         parts = [
             {"part_number": 1, "etag": "etag1"},
             {"part_number": 2, "etag": "etag2"},
         ]
 
-        result = await complete_multipart_upload(
-            mock_client, "test-key", "upload-id", parts
+        result = await mock_client.complete_multipart_upload(
+            "test-key", "upload-id", parts
         )
 
         assert result["location"] == "https://bucket.s3.amazonaws.com/key"
         assert result["etag"] == "final-etag"
         assert result["parts_count"] == 2
-        mock_response.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_complete_multipart_upload_no_parts(self):
-        mock_client = MagicMock()
-
+    async def test_complete_multipart_upload_no_parts(self, mock_client):
         with pytest.raises(S3ClientError, match="No parts to complete"):
-            await complete_multipart_upload(mock_client, "key", "upload-id", [])
+            await mock_client.complete_multipart_upload("key", "upload-id", [])
 
     @pytest.mark.asyncio
-    async def test_abort_multipart_upload(self):
-        mock_client = MagicMock()
-        mock_response = AsyncMock()
-        mock_response.close = Mock()
-        mock_client._make_request = AsyncMock(return_value=mock_response)
-
-        await abort_multipart_upload(mock_client, "test-key", "upload-id")
-
-        mock_client._make_request.assert_called_once()
-        mock_response.close.assert_called_once()
+    async def test_abort_multipart_upload(self, mock_client):
+        mock_client.add_response("")
+        await mock_client.abort_multipart_upload("test-key", "upload-id")
+        assert len(mock_client.requests) == 1
 
 
 class TestUploadFile:
     @pytest.mark.asyncio
-    async def test_upload_file_single_part(self):
-        mock_client = MagicMock()
-        mock_client.put_object = AsyncMock(return_value={"etag": "test-etag"})
+    async def test_upload_file_single_part(self, mock_client):
+        data = b"small file data"
+        mock_client.add_response(data, headers={"ETag": '"test-etag"'})
 
         with tempfile.NamedTemporaryFile() as tmp:
-            data = b"small file data"
             tmp.write(data)
             tmp.flush()
 
-            config = TransferConfig(multipart_threshold=1024)  # 1KB threshold
-
-            result = await upload_file(mock_client, "test-key", tmp.name, config)
+            config = TransferConfig(multipart_threshold=1024)
+            result = await mock_client.upload_file("test-key", tmp.name, config)
 
             assert result["upload_type"] == "single_part"
             assert result["size"] == len(data)
-            mock_client.put_object.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upload_file_multipart(self):
-        mock_client = MagicMock()
-
-        with (
-            patch("s3_asyncio_client.multipart.create_multipart_upload") as mock_create,
-            patch(
-                "s3_asyncio_client.multipart._upload_parts_concurrently"
-            ) as mock_upload_parts,
-            patch(
-                "s3_asyncio_client.multipart.complete_multipart_upload"
-            ) as mock_complete,
+    async def test_upload_file_multipart(self, mock_client, monkeypatch):
+        # Mock the multipart upload methods
+        async def mock_create_multipart_upload(
+            key, content_type=None, metadata=None, **kwargs
         ):
-            mock_create.return_value = "test-upload-id"
-            mock_upload_parts.return_value = [
+            return "test-upload-id"
+
+        async def mock_upload_parts_concurrently(
+            key,
+            upload_id,
+            file_source,
+            part_size,
+            max_concurrency=10,
+            progress_callback=None,
+        ):
+            return [
                 {"part_number": 1, "etag": "etag1"},
                 {"part_number": 2, "etag": "etag2"},
             ]
-            mock_complete.return_value = {
+
+        async def mock_complete_multipart_upload(key, upload_id, parts):
+            return {
                 "location": "test-location",
                 "etag": "final-etag",
                 "parts_count": 2,
             }
 
-            with tempfile.NamedTemporaryFile() as tmp:
-                data = b"0" * (10 * 1024 * 1024)
-                tmp.write(data)
-                tmp.flush()
+        monkeypatch.setattr(
+            mock_client, "create_multipart_upload", mock_create_multipart_upload
+        )
+        monkeypatch.setattr(
+            mock_client, "_upload_parts_concurrently", mock_upload_parts_concurrently
+        )
+        monkeypatch.setattr(
+            mock_client, "complete_multipart_upload", mock_complete_multipart_upload
+        )
 
-                config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
+        with tempfile.NamedTemporaryFile() as tmp:
+            data = b"0" * (10 * 1024 * 1024)
+            tmp.write(data)
+            tmp.flush()
 
-                result = await upload_file(mock_client, "test-key", tmp.name, config)
+            config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
 
-                assert result["upload_type"] == "multipart"
-                assert result["size"] == len(data)
-                assert result["parts_count"] == 2
-                mock_create.assert_called_once()
-                mock_upload_parts.assert_called_once()
-                mock_complete.assert_called_once()
+            result = await mock_client.upload_file("test-key", tmp.name, config)
+
+            assert result["upload_type"] == "multipart"
+            assert result["size"] == len(data)
+            assert result["parts_count"] == 2
 
     @pytest.mark.asyncio
-    async def test_upload_file_with_fileobj(self):
-        mock_client = MagicMock()
-        mock_client.put_object = AsyncMock(return_value={"etag": "test-etag"})
+    async def test_upload_file_with_fileobj(self, mock_client):
+        async def mock_put_object(key, data, **kwargs):
+            return {"etag": "test-etag"}
+
+        mock_client.put_object = mock_put_object
 
         data = b"file object data"
         fileobj = BytesIO(data)
 
         config = TransferConfig(multipart_threshold=1024)  # 1KB threshold
 
-        result = await upload_file(mock_client, "test-key", fileobj, config)
+        result = await mock_client.upload_file("test-key", fileobj, config)
 
         assert result["upload_type"] == "single_part"
         assert result["size"] == len(data)
-        mock_client.put_object.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upload_file_with_progress_callback(self):
-        mock_client = MagicMock()
-        mock_client.put_object = AsyncMock(return_value={"etag": "test-etag"})
+    async def test_upload_file_with_progress_callback(self, mock_client):
+        async def mock_put_object(key, data, **kwargs):
+            return {"etag": "test-etag"}
+
+        mock_client.put_object = mock_put_object
 
         progress_calls = []
 
@@ -359,8 +336,7 @@ class TestUploadFile:
 
             config = TransferConfig(multipart_threshold=1024)
 
-            await upload_file(
-                mock_client,
+            await mock_client.upload_file(
                 "test-key",
                 tmp.name,
                 config,
@@ -371,29 +347,47 @@ class TestUploadFile:
             assert progress_calls[0] == len(data)
 
     @pytest.mark.asyncio
-    async def test_upload_file_multipart_error_cleanup(self):
-        mock_client = MagicMock()
+    async def test_upload_file_multipart_error_cleanup(self, mock_client, monkeypatch):
+        # Track calls to abort_multipart_upload
+        abort_calls = []
 
-        with (
-            patch("s3_asyncio_client.multipart.create_multipart_upload") as mock_create,
-            patch(
-                "s3_asyncio_client.multipart._upload_parts_concurrently"
-            ) as mock_upload_parts,
-            patch("s3_asyncio_client.multipart.abort_multipart_upload") as mock_abort,
+        async def mock_create_multipart_upload(
+            key, content_type=None, metadata=None, **kwargs
         ):
-            mock_create.return_value = "test-upload-id"
-            mock_upload_parts.side_effect = Exception("Upload failed")
+            return "test-upload-id"
 
-            with tempfile.NamedTemporaryFile() as tmp:
-                data = b"0" * (10 * 1024 * 1024)
-                tmp.write(data)
-                tmp.flush()
+        async def mock_upload_parts_concurrently(
+            key,
+            upload_id,
+            file_source,
+            part_size,
+            max_concurrency=10,
+            progress_callback=None,
+        ):
+            raise Exception("Upload failed")
 
-                config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
+        async def mock_abort_multipart_upload(key, upload_id):
+            abort_calls.append((key, upload_id))
 
-                with pytest.raises(Exception, match="Upload failed"):
-                    await upload_file(mock_client, "test-key", tmp.name, config)
+        monkeypatch.setattr(
+            mock_client, "create_multipart_upload", mock_create_multipart_upload
+        )
+        monkeypatch.setattr(
+            mock_client, "_upload_parts_concurrently", mock_upload_parts_concurrently
+        )
+        monkeypatch.setattr(
+            mock_client, "abort_multipart_upload", mock_abort_multipart_upload
+        )
 
-                mock_abort.assert_called_once_with(
-                    mock_client, "test-key", "test-upload-id"
-                )
+        with tempfile.NamedTemporaryFile() as tmp:
+            data = b"0" * (10 * 1024 * 1024)
+            tmp.write(data)
+            tmp.flush()
+
+            config = TransferConfig(multipart_threshold=5 * 1024 * 1024)
+
+            with pytest.raises(Exception, match="Upload failed"):
+                await mock_client.upload_file("test-key", tmp.name, config)
+
+            assert len(abort_calls) == 1
+            assert abort_calls[0] == ("test-key", "test-upload-id")

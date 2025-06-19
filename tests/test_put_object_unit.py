@@ -1,54 +1,28 @@
-from s3_asyncio_client import S3Client
+import pytest
 
 
-async def test_put_object_headers(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
-    class MockResponse:
-        headers = {
+@pytest.mark.asyncio
+async def test_put_object_headers(mock_client):
+    mock_client.add_response(
+        "",
+        headers={
             "ETag": '"abcd1234"',
             "x-amz-version-id": "version123",
-        }
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
+        },
+    )
 
     data = b"Hello, World!"
     metadata = {"author": "test", "purpose": "testing"}
 
-    result = await client.put_object(
+    result = await mock_client.put_object(
         key="test-key",
         data=data,
         content_type="text/plain",
         metadata=metadata,
     )
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
     assert call_args["key"] == "test-key"
@@ -64,44 +38,15 @@ async def test_put_object_headers(monkeypatch):
     assert result["version_id"] == "version123"
 
 
-async def test_put_object_minimal(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
-    class MockResponse:
-        headers = {"ETag": '"minimal"'}
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
+@pytest.mark.asyncio
+async def test_put_object_minimal(mock_client):
+    mock_client.add_response("", headers={"ETag": '"minimal"'})
 
     data = b"minimal data"
-    result = await client.put_object("key", data)
+    result = await mock_client.put_object("key", data)
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
     headers = call_args["headers"]
 
     assert "Content-Length" in headers

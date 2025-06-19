@@ -6,7 +6,7 @@ import sys
 
 import click
 
-from .client import S3Client
+from .base import S3Client
 
 
 @click.group()

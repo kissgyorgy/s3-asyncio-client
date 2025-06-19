@@ -11,17 +11,6 @@ from s3_asyncio_client.exceptions import (
 
 
 @pytest.fixture
-def client():
-    return S3Client(
-        access_key="test-access-key",
-        secret_key="test-secret-key",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
-
-@pytest.fixture
 def client_custom_endpoint():
     return S3Client(
         access_key="test-access-key",
@@ -32,12 +21,14 @@ def client_custom_endpoint():
     )
 
 
-def test_client_initialization(client):
-    assert client.access_key == "test-access-key"
-    assert client.secret_key == "test-secret-key"
-    assert client.region == "us-east-1"
-    assert str(client.bucket_url) == "https://test-bucket.s3.us-east-1.amazonaws.com"
-    assert client._session is None
+def test_client_initialization(mock_client):
+    assert mock_client.access_key == "test-access-key"
+    assert mock_client.secret_key == "test-secret-key"
+    assert mock_client.region == "us-east-1"
+    assert (
+        str(mock_client.bucket_url) == "https://test-bucket.s3.us-east-1.amazonaws.com"
+    )
+    assert mock_client._session is None
 
 
 def test_client_initialization_custom_endpoint(client_custom_endpoint):
@@ -47,7 +38,7 @@ def test_client_initialization_custom_endpoint(client_custom_endpoint):
     )
 
 
-def test_parse_error_response_xml(client):
+def test_parse_error_response_xml(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>NoSuchKey</Code>
@@ -56,75 +47,75 @@ def test_parse_error_response_xml(client):
         <BucketName>test-bucket</BucketName>
     </Error>"""
 
-    exception = client._parse_error_response(404, xml_response)
+    exception = mock_client._parse_error_response(404, xml_response)
     assert isinstance(exception, S3NotFoundError)
     assert "specified key does not exist" in str(exception)
 
 
-def test_parse_error_response_access_denied(client):
+def test_parse_error_response_access_denied(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>AccessDenied</Code>
         <Message>Access Denied</Message>
     </Error>"""
 
-    exception = client._parse_error_response(403, xml_response)
+    exception = mock_client._parse_error_response(403, xml_response)
     assert isinstance(exception, S3AccessDeniedError)
 
 
-def test_parse_error_response_invalid_request(client):
+def test_parse_error_response_invalid_request(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>InvalidRequest</Code>
         <Message>Invalid request</Message>
     </Error>"""
 
-    exception = client._parse_error_response(400, xml_response)
+    exception = mock_client._parse_error_response(400, xml_response)
     assert isinstance(exception, S3InvalidRequestError)
 
 
-def test_parse_error_response_client_error(client):
+def test_parse_error_response_client_error(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>SomeClientError</Code>
         <Message>Some client error</Message>
     </Error>"""
 
-    exception = client._parse_error_response(400, xml_response)
+    exception = mock_client._parse_error_response(400, xml_response)
     assert isinstance(exception, S3ClientError)
     assert exception.status_code == 400
     assert exception.error_code == "SomeClientError"
 
 
-def test_parse_error_response_server_error(client):
+def test_parse_error_response_server_error(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
         <Code>InternalError</Code>
         <Message>We encountered an internal error</Message>
     </Error>"""
 
-    exception = client._parse_error_response(500, xml_response)
+    exception = mock_client._parse_error_response(500, xml_response)
     assert isinstance(exception, S3ServerError)
     assert exception.status_code == 500
 
 
-def test_parse_error_response_malformed_xml(client):
+def test_parse_error_response_malformed_xml(mock_client):
     malformed_xml = "<Error><Code>Test</Error>"  # Missing closing tag
 
-    exception = client._parse_error_response(500, malformed_xml)
+    exception = mock_client._parse_error_response(500, malformed_xml)
     assert isinstance(exception, S3ServerError)
     assert malformed_xml in str(exception)
 
 
-def test_parse_error_response_no_xml(client):
+def test_parse_error_response_no_xml(mock_client):
     plain_text = "Internal Server Error"
 
-    exception = client._parse_error_response(500, plain_text)
+    exception = mock_client._parse_error_response(500, plain_text)
     assert isinstance(exception, S3ServerError)
     assert "Internal Server Error" in str(exception)
 
 
-def test_parse_error_response_status_code_precedence(client):
+def test_parse_error_response_status_code_precedence(mock_client):
     # 404 status should create S3NotFoundError regardless of error code
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <Error>
@@ -132,7 +123,7 @@ def test_parse_error_response_status_code_precedence(client):
         <Message>Not found</Message>
     </Error>"""
 
-    exception = client._parse_error_response(404, xml_response)
+    exception = mock_client._parse_error_response(404, xml_response)
     assert isinstance(exception, S3NotFoundError)
 
 
@@ -141,76 +132,35 @@ async def test_context_manager():
         "key", "secret", "us-east-1", "https://s3.amazonaws.com", "test-bucket"
     ) as client:
         assert client._session is not None
-    # Session should be closed after exiting context
-
-
-async def test_methods_are_implemented(client, monkeypatch):
-    class MockResponse:
-        headers = {"ETag": '"test"'}
-
-        async def read(self):
-            return b"test"
-
-        async def text(self):
-            return "<xml>test</xml>"
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    async def mock_make_request(method, **kwargs):
-        return mock_response
-
-    def mock_create_presigned_url(method, url, expires_in, params):
-        return "https://example.com"
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-    monkeypatch.setattr(client._auth, "create_presigned_url", mock_create_presigned_url)
-
-    await client.put_object("key", b"data")
-    await client.get_object("key")
-    await client.head_object("key")
-    await client.list_objects()
-    client.generate_presigned_url("GET", "key")
-
-
-async def test_ensure_session(client):
-    assert client._session is None
-    await client._ensure_session()
-    assert client._session is not None
-    await client.close()
-
-
-async def test_close_session(client):
-    await client._ensure_session()
-    assert client._session is not None
-    await client.close()
     assert client._session is None
 
 
-async def test_create_bucket(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
+@pytest.mark.asyncio
+async def test_ensure_session(mock_client):
+    assert mock_client._session is None
+    await mock_client._ensure_session()
+    assert mock_client._session is not None
+    await mock_client.close()
 
-        def close(self):
-            pass
 
-    mock_response = MockResponse()
+@pytest.mark.asyncio
+async def test_close_session(mock_client):
+    await mock_client._ensure_session()
+    assert mock_client._session is not None
+    await mock_client.close()
+    assert mock_client._session is None
 
-    calls = []
 
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
+@pytest.mark.asyncio
+async def test_create_bucket(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.amazonaws.com/"}
+    )
 
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
+    result = await mock_client.create_bucket()
 
-    result = await client.create_bucket()
-
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
     assert call_args.get("key") is None
@@ -221,31 +171,17 @@ async def test_create_bucket(client, monkeypatch):
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
 
 
-async def test_create_bucket_with_region(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.eu-west-1.amazonaws.com/"}
+@pytest.mark.asyncio
+async def test_create_bucket_with_region(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.eu-west-1.amazonaws.com/"}
+    )
+    result = await mock_client.create_bucket(region="eu-west-1")
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(region="eu-west-1")
-
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
-    # bucket is no longer passed to _make_request
     assert call_args.get("key") is None
     assert call_args["headers"]["Content-Type"] == "application/xml"
     assert call_args.get("params") is None
@@ -258,31 +194,17 @@ async def test_create_bucket_with_region(client, monkeypatch):
     assert result["location"] == "https://test-bucket.s3.eu-west-1.amazonaws.com/"
 
 
-async def test_create_bucket_us_east_1_no_location_constraint(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
+@pytest.mark.asyncio
+async def test_create_bucket_us_east_1_no_location_constraint(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.amazonaws.com/"}
+    )
+    result = await mock_client.create_bucket(region="us-east-1")
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(region="us-east-1")
-
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
-    # bucket is no longer passed to _make_request
     assert call_args.get("key") is None
     assert call_args.get("headers") is None  # No headers for us-east-1
     assert call_args.get("params") is None
@@ -291,35 +213,21 @@ async def test_create_bucket_us_east_1_no_location_constraint(client, monkeypatc
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
 
 
-async def test_create_bucket_with_acl_and_object_lock(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(
+@pytest.mark.asyncio
+async def test_create_bucket_with_acl_and_object_lock(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.amazonaws.com/"}
+    )
+    result = await mock_client.create_bucket(
         acl="private",
         object_lock_enabled=True,
         object_ownership="BucketOwnerPreferred",
     )
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
-    # bucket is no longer passed to _make_request
     assert call_args.get("key") is None
     headers = call_args["headers"]
     assert headers["x-amz-acl"] == "private"
@@ -331,25 +239,12 @@ async def test_create_bucket_with_acl_and_object_lock(client, monkeypatch):
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
 
 
-async def test_create_bucket_with_grant_headers(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.amazonaws.com/"}
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(
+@pytest.mark.asyncio
+async def test_create_bucket_with_grant_headers(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.amazonaws.com/"}
+    )
+    result = await mock_client.create_bucket(
         grant_full_control="id=canonical-user-id",
         grant_read="id=canonical-user-id",
         grant_read_acp="id=canonical-user-id",
@@ -357,11 +252,10 @@ async def test_create_bucket_with_grant_headers(client, monkeypatch):
         grant_write_acp="id=canonical-user-id",
     )
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
-    # bucket is no longer passed to _make_request
     assert call_args.get("key") is None
     headers = call_args["headers"]
     assert headers["x-amz-grant-full-control"] == "id=canonical-user-id"
@@ -375,35 +269,23 @@ async def test_create_bucket_with_grant_headers(client, monkeypatch):
     assert result["location"] == "https://test-bucket.s3.amazonaws.com/"
 
 
-async def test_create_bucket_directory_bucket_with_location(client, monkeypatch):
-    class MockResponse:
-        headers = {
+@pytest.mark.asyncio
+async def test_create_bucket_directory_bucket_with_location(mock_client):
+    mock_client.add_response(
+        "",
+        headers={
             "Location": "https://test-bucket--use1-az1--x-s3.s3express-use1-az1.us-east-1.amazonaws.com/"
-        }
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(
+        },
+    )
+    result = await mock_client.create_bucket(
         location_name="use1-az1",
         location_type="AvailabilityZone",
         bucket_type="Directory",
         data_redundancy="SingleAvailabilityZone",
     )
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
     # bucket is no longer passed to _make_request
@@ -427,25 +309,12 @@ async def test_create_bucket_directory_bucket_with_location(client, monkeypatch)
     )
 
 
-async def test_create_bucket_mixed_configuration(client, monkeypatch):
-    class MockResponse:
-        headers = {"Location": "https://test-bucket.s3.eu-west-1.amazonaws.com/"}
-
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, **kwargs):
-        call_info = {"method": method, **kwargs}
-        calls.append(call_info)
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.create_bucket(
+@pytest.mark.asyncio
+async def test_create_bucket_mixed_configuration(mock_client):
+    mock_client.add_response(
+        "", headers={"Location": "https://test-bucket.s3.eu-west-1.amazonaws.com/"}
+    )
+    result = await mock_client.create_bucket(
         region="eu-west-1",
         acl="private",
         grant_full_control="id=canonical-user-id",
@@ -453,8 +322,8 @@ async def test_create_bucket_mixed_configuration(client, monkeypatch):
         object_ownership="BucketOwnerPreferred",
     )
 
-    assert len(calls) == 1
-    call_args = calls[0]
+    assert len(mock_client.requests) == 1
+    call_args = mock_client.requests[0]
 
     assert call_args["method"] == "PUT"
     # bucket is no longer passed to _make_request

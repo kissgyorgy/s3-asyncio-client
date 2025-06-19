@@ -1,15 +1,8 @@
-from s3_asyncio_client import S3Client
+import pytest
 
 
-async def test_list_objects_basic(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
+@pytest.mark.asyncio
+async def test_list_objects_basic(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
         <Name>test-bucket</Name>
@@ -31,37 +24,14 @@ async def test_list_objects_basic(monkeypatch):
             <Size>200</Size>
             <StorageClass>STANDARD</StorageClass>
         </Contents>
-    </ListBucketResult>"""
+    </ListBucketResult>
+    """
+    mock_client.add_response(xml_response)
 
-    class MockResponse:
-        async def text(self):
-            return xml_response
+    result = await mock_client.list_objects()
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.list_objects()
-
-    assert len(calls) == 1
-    assert calls[0] == {
+    assert len(mock_client.requests) == 1
+    assert mock_client.requests[0] == {
         "method": "GET",
         "key": None,
         "headers": None,
@@ -83,49 +53,18 @@ async def test_list_objects_basic(monkeypatch):
     assert obj1["storage_class"] == "STANDARD"
 
 
-async def test_list_objects_with_prefix(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
+@pytest.mark.asyncio
+async def test_list_objects_with_prefix(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
         <IsTruncated>false</IsTruncated>
     </ListBucketResult>"""
+    mock_client.add_response(xml_response)
 
-    class MockResponse:
-        async def text(self):
-            return xml_response
+    await mock_client.list_objects(prefix="photos/", max_keys=50)
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    await client.list_objects(prefix="photos/", max_keys=50)
-
-    assert len(calls) == 1
-    assert calls[0] == {
+    assert len(mock_client.requests) == 1
+    assert mock_client.requests[0] == {
         "method": "GET",
         "key": None,
         "headers": None,
@@ -138,15 +77,8 @@ async def test_list_objects_with_prefix(monkeypatch):
     }
 
 
-async def test_list_objects_with_pagination(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
+@pytest.mark.asyncio
+async def test_list_objects_with_pagination(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
         <IsTruncated>true</IsTruncated>
@@ -158,36 +90,12 @@ async def test_list_objects_with_pagination(monkeypatch):
             <Size>100</Size>
         </Contents>
     </ListBucketResult>"""
+    mock_client.add_response(xml_response)
 
-    class MockResponse:
-        async def text(self):
-            return xml_response
+    result = await mock_client.list_objects(continuation_token="prev-token")
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    calls = []
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        calls.append(
-            {
-                "method": method,
-                "key": key,
-                "headers": headers,
-                "params": params,
-                "data": data,
-            }
-        )
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.list_objects(continuation_token="prev-token")
-
-    assert len(calls) == 1
-    assert calls[0] == {
+    assert len(mock_client.requests) == 1
+    assert mock_client.requests[0] == {
         "method": "GET",
         "key": None,
         "headers": None,
@@ -203,35 +111,17 @@ async def test_list_objects_with_pagination(monkeypatch):
     assert result["next_continuation_token"] == "token123"
 
 
-async def test_list_objects_empty(monkeypatch):
-    client = S3Client(
-        access_key="test-key",
-        secret_key="test-secret",
-        region="us-east-1",
-        endpoint_url="https://s3.us-east-1.amazonaws.com",
-        bucket="test-bucket",
-    )
-
+@pytest.mark.asyncio
+async def test_list_objects_empty(mock_client):
     xml_response = """<?xml version="1.0" encoding="UTF-8"?>
     <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
         <IsTruncated>false</IsTruncated>
     </ListBucketResult>"""
 
-    class MockResponse:
-        async def text(self):
-            return xml_response
+    # Add XML response to mock_client
+    mock_client.add_response(xml_response)
 
-        def close(self):
-            pass
-
-    mock_response = MockResponse()
-
-    async def mock_make_request(method, key=None, headers=None, params=None, data=None):
-        return mock_response
-
-    monkeypatch.setattr(client, "_make_request", mock_make_request)
-
-    result = await client.list_objects()
+    result = await mock_client.list_objects()
 
     assert len(result["objects"]) == 0
     assert result["is_truncated"] is False
