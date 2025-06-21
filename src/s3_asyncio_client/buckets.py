@@ -4,6 +4,53 @@ from typing import Any
 from .base import _S3ClientBase
 
 
+def _build_create_bucket_xml(
+    region: str | None = None,
+    location_type: str | None = None,
+    location_name: str | None = None,
+    bucket_type: str | None = None,
+    data_redundancy: str | None = None,
+) -> bytes | None:
+    if not (
+        region
+        and region != "us-east-1"
+        or location_type
+        or location_name
+        or bucket_type
+        or data_redundancy
+    ):
+        return None
+
+    root = ET.Element("CreateBucketConfiguration")
+    root.set("xmlns", "http://s3.amazonaws.com/doc/2006-03-01/")
+
+    if region and region != "us-east-1":
+        location_constraint = ET.SubElement(root, "LocationConstraint")
+        location_constraint.text = region
+
+    # Location for directory buckets
+    if location_type or location_name:
+        location = ET.SubElement(root, "Location")
+        if location_name:
+            name = ET.SubElement(location, "Name")
+            name.text = location_name
+        if location_type:
+            type_elem = ET.SubElement(location, "Type")
+            type_elem.text = location_type
+
+    # Bucket configuration for directory buckets
+    if bucket_type or data_redundancy:
+        bucket = ET.SubElement(root, "Bucket")
+        if data_redundancy:
+            data_redundancy_elem = ET.SubElement(bucket, "DataRedundancy")
+            data_redundancy_elem.text = data_redundancy
+        if bucket_type:
+            type_elem = ET.SubElement(bucket, "Type")
+            type_elem.text = bucket_type
+
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
 class _BucketOperations(_S3ClientBase):
     # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
     async def create_bucket(
@@ -44,45 +91,14 @@ class _BucketOperations(_S3ClientBase):
         if object_ownership:
             headers["x-amz-object-ownership"] = object_ownership
 
-        xml_parts = []
-
-        if region and region != "us-east-1":
-            xml_parts.append(f"    <LocationConstraint>{region}</LocationConstraint>")
-
-        # Location for directory buckets
-        if location_type or location_name:
-            location_elements = []
-            if location_name:
-                location_elements.append(f"      <Name>{location_name}</Name>")
-            if location_type:
-                location_elements.append(f"      <Type>{location_type}</Type>")
-
-            if location_elements:
-                xml_parts.append("    <Location>")
-                xml_parts.extend(location_elements)
-                xml_parts.append("    </Location>")
-
-        # Bucket configuration for directory buckets
-        if bucket_type or data_redundancy:
-            bucket_elements = []
-            if data_redundancy:
-                bucket_elements.append(
-                    f"      <DataRedundancy>{data_redundancy}</DataRedundancy>"
-                )
-            if bucket_type:
-                bucket_elements.append(f"      <Type>{bucket_type}</Type>")
-
-            if bucket_elements:
-                xml_parts.append("    <Bucket>")
-                xml_parts.extend(bucket_elements)
-                xml_parts.append("    </Bucket>")
-
-        if xml_parts:
-            location_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<CreateBucketConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-{chr(10).join(xml_parts)}
-</CreateBucketConfiguration>"""
-            data = location_xml.encode("utf-8")
+        data = _build_create_bucket_xml(
+            region=region,
+            location_type=location_type,
+            location_name=location_name,
+            bucket_type=bucket_type,
+            data_redundancy=data_redundancy,
+        )
+        if data:
             headers["Content-Type"] = "application/xml"
 
         response = await self._make_request(

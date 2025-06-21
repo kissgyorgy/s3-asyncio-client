@@ -31,6 +31,22 @@ DEFAULT_MULTIPART_CHUNKSIZE = 8 * MB
 DEFAULT_MAX_CONCURRENCY = 10
 
 
+def _build_complete_multipart_xml(parts: list[dict[str, Any]]) -> bytes:
+    """Build CompleteMultipartUpload XML for completing multipart upload."""
+    root = ET.Element("CompleteMultipartUpload")
+
+    for part in sorted(parts, key=lambda x: x["part_number"]):
+        part_elem = ET.SubElement(root, "Part")
+
+        part_number_elem = ET.SubElement(part_elem, "PartNumber")
+        part_number_elem.text = str(part["part_number"])
+
+        etag_elem = ET.SubElement(part_elem, "ETag")
+        etag_elem.text = f'"{part["etag"]}"'
+
+    return ET.tostring(root, encoding="utf-8")
+
+
 @dataclass
 class TransferConfig:
     multipart_threshold: int = DEFAULT_MULTIPART_THRESHOLD
@@ -206,33 +222,16 @@ class _MultipartOperations(_S3ClientBase):
         if not parts:
             raise S3ClientError("No parts to complete")
 
-        parts_sorted = sorted(parts, key=lambda x: x["part_number"])
-
-        parts_xml = []
-        for part in parts_sorted:
-            parts_xml.append(
-                f"<Part>"
-                f"<PartNumber>{part['part_number']}</PartNumber>"
-                f'<ETag>"{part["etag"]}"</ETag>'
-                f"</Part>"
-            )
-
-        xml_data = (
-            "<CompleteMultipartUpload>"
-            + "".join(parts_xml)
-            + "</CompleteMultipartUpload>"
-        )
+        xml_data = _build_complete_multipart_xml(parts)
 
         params = {"uploadId": upload_id}
         headers = {
             "Content-Type": "application/xml",
-            "Content-Length": str(len(xml_data.encode())),
+            "Content-Length": str(len(xml_data)),
         }
         headers.update(extra_args)
 
-        response = await self._make_request(
-            "POST", key, headers, params, xml_data.encode()
-        )
+        response = await self._make_request("POST", key, headers, params, xml_data)
 
         response_text = await response.text()
         response.close()
@@ -245,7 +244,7 @@ class _MultipartOperations(_S3ClientBase):
             "location": location.text if location is not None else None,
             "etag": etag.text.strip('"') if etag is not None else "",
             "key": key,
-            "parts_count": len(parts_sorted),
+            "parts_count": len(parts),
         }
 
     async def abort_multipart_upload(self, key: str, upload_id: str, **extra_args):
